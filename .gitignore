@@ -1,0 +1,72 @@
+# Build directories
+build/
+build-*/
+cmake-build-*/
+out/
+
+# CMake generated files
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+compile_commands.json
+CTestTestfile.cmake
+Testing/
+install_manifest.txt
+
+# Qt generated files
+*.pro.user
+*.pro.user.*
+*.qbs.user
+*.qbs.user.*
+*.autosave
+moc_*.cpp
+qrc_*.cpp
+ui_*.h
+*.qmlc
+*.jsc
+
+# C++ binaries and intermediates
+*.o
+*.obj
+*.a
+*.lib
+*.dll
+*.exe
+*.pdb
+*.ilk
+*.exp
+*.so
+*.dylib
+
+# IDE and editor files
+.vs/
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Runtime data
+logs/
+*.log
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+data/runtime/
+
+# Package output
+dist/
+release/
+debug/
+packages/
+*.zip
+*.7z
+*.msi
+*.msix
+
+# OS files
+Thumbs.db
+Desktop.ini
+.DS_Store
