@@ -29,6 +29,7 @@
 - [需求分析](docs/01-requirements-analysis.md)
 - [开发流程](docs/02-development-process.md)
 - [项目路线图](docs/03-roadmap.md)
+- [产线模型与典型用例](docs/04-line-model-and-use-cases.md)
 
 ## 阶段路线
 
