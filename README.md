@@ -30,6 +30,7 @@
 - [开发流程](docs/02-development-process.md)
 - [项目路线图](docs/03-roadmap.md)
 - [产线模型与典型用例](docs/04-line-model-and-use-cases.md)
+- [总体设计](docs/05-overall-design.md)
 
 ## 阶段路线
 
