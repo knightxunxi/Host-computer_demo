@@ -29,7 +29,7 @@
 | 语言 | C++20 | 使用现代 C++ 基础能力，避免过度模板化 |
 | UI | Qt Widgets | 适合传统工控界面、表格、参数页和对话框 |
 | 构建 | CMake | 后续生成 Qt/C++ 工程骨架 |
-| 编译器 | MinGW 64-bit | 匹配本机 Qt 6.10.2 MinGW |
+| 编译器 | Qt 自带 MinGW 13.1 64-bit | 使用 `D:\QT\Tools\mingw1310_64`，避免混用独立 MinGW 导致链接错误 |
 | 通信 MVP | Qt Network + Modbus TCP 最小实现 | 当前 Qt 安装未检测到 QtSerialBus/QtSerialPort |
 | 数据库 | SQLite + QtSql | 本机已检测到 QtSql，适合单机数据记录 |
 | 曲线 | Qt Charts | 本机已检测到 QtCharts |

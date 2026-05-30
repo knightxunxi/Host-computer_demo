@@ -6,7 +6,7 @@
 
 - 学习目标：通过一个完整项目理解工业上位机从需求到交付的开发流程。
 - 业务场景：模拟一条小型包装产线，上位机负责设备监控、控制操作、报警处理、生产记录和配方管理。
-- 当前阶段：首阶段只初始化仓库和需求文档，不创建 CMake/Qt 代码骨架。
+- 当前阶段：已进入 Qt/CMake 工程骨架，包含最小 Qt Widgets 主窗口和基础目录结构。
 - 后续设备接入：没有真实 PLC 前，默认使用仓库内置虚拟包装线/PLC 模拟器，并通过协议模拟学习 TCP Socket、Modbus TCP、串口、Modbus RTU、OPC UA 和 Snap7/S7。
 
 ## 技术栈规划
@@ -31,6 +31,22 @@
 - [项目路线图](docs/03-roadmap.md)
 - [产线模型与典型用例](docs/04-line-model-and-use-cases.md)
 - [总体设计](docs/05-overall-design.md)
+
+## 构建运行
+
+本机 Qt 安装路径按 `D:\QT\6.10.2\mingw_64` 规划，编译器使用 Qt 自带的 `D:\QT\Tools\mingw1310_64`。不要混用其他 MinGW 版本，否则可能出现 Qt 链接错误。
+
+```powershell
+$env:Path='D:\QT\6.10.2\mingw_64\bin;D:\QT\Tools\mingw1310_64\bin;' + $env:Path
+cmake -S . -B build -G "MinGW Makefiles" -DCMAKE_PREFIX_PATH=D:\QT\6.10.2\mingw_64 -DCMAKE_CXX_COMPILER=D:\QT\Tools\mingw1310_64\bin\g++.exe
+cmake --build build
+```
+
+运行：
+
+```powershell
+.\build\upkun-hmi.exe
+```
 
 ## 阶段路线
 
