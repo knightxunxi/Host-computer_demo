@@ -11,6 +11,9 @@ public:
 
     bool open(const QString& databasePath, QString* errorMessage = nullptr);
     QStringList availableDrivers() const;
+
+private:
+    bool initializeSchema(QString* errorMessage);
 };
 
 } // namespace upkun::storage

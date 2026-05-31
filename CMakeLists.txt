@@ -24,6 +24,8 @@ qt_add_executable(UpkunHmi WIN32
     src/app/MainWindow.cpp
     src/ui/pages/MonitorPage.h
     src/ui/pages/MonitorPage.cpp
+    src/ui/pages/AlarmPage.h
+    src/ui/pages/AlarmPage.cpp
     src/ui/pages/SimulatorPage.h
     src/ui/pages/SimulatorPage.cpp
     src/domain/DeviceTypes.h
@@ -32,6 +34,8 @@ qt_add_executable(UpkunHmi WIN32
     src/domain/User.h
     src/services/LineControlService.h
     src/services/LineControlService.cpp
+    src/services/AlarmService.h
+    src/services/AlarmService.cpp
     src/services/UserSessionService.h
     src/services/UserSessionService.cpp
     src/device/IDeviceClient.h
@@ -44,6 +48,10 @@ qt_add_executable(UpkunHmi WIN32
     src/simulator/SimulatedModbusServer.cpp
     src/storage/DatabaseManager.h
     src/storage/DatabaseManager.cpp
+    src/storage/AlarmRepository.h
+    src/storage/AlarmRepository.cpp
+    src/storage/OperationLogRepository.h
+    src/storage/OperationLogRepository.cpp
     src/infrastructure/AppConfig.h
     src/infrastructure/AppConfig.cpp
     src/infrastructure/Logger.h

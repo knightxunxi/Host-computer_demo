@@ -2,6 +2,7 @@
 
 #include "device/ModbusTcpClient.h"
 #include "simulator/SimulatedModbusServer.h"
+#include "ui/pages/AlarmPage.h"
 #include "ui/pages/MonitorPage.h"
 #include "ui/pages/SimulatorPage.h"
 
@@ -120,8 +121,10 @@ MainWindow::MainWindow(QWidget* parent)
 
     m_pages = new QStackedWidget(body);
     m_monitorPage = new upkun::ui::MonitorPage(m_pages);
+    m_alarmPage = new upkun::ui::AlarmPage(m_pages);
     m_simulatorPage = new upkun::ui::SimulatorPage(m_pages);
     m_pages->addWidget(m_monitorPage);
+    m_pages->addWidget(m_alarmPage);
     m_pages->addWidget(m_simulatorPage);
     bodyLayout->addWidget(m_pages, 1);
 
@@ -133,6 +136,7 @@ MainWindow::MainWindow(QWidget* parent)
     connect(m_navigation, &QListWidget::currentRowChanged, this, &MainWindow::handleNavigationChanged);
     m_navigation->setCurrentRow(0);
 
+    setupStorage();
     setupDeviceLink();
 }
 
@@ -151,6 +155,10 @@ void MainWindow::handleSnapshotUpdated(const upkun::domain::DeviceSnapshot& snap
             ? QStringLiteral("当前报警：无")
             : QStringLiteral("当前报警：%1").arg(snapshot.currentAlarmCode));
 
+    if (m_alarmService != nullptr) {
+        m_alarmService->processSnapshot(snapshot);
+    }
+
     m_monitorPage->updateSnapshot(snapshot);
     m_simulatorPage->updateSnapshot(snapshot);
 }
@@ -164,6 +172,22 @@ void MainWindow::handleCommandFinished(upkun::domain::DeviceCommand command, boo
 {
     m_alarmLabel->setText(QStringLiteral("命令反馈：%1 %2，%3")
             .arg(commandText(command), ok ? QStringLiteral("成功") : QStringLiteral("失败"), message));
+    appendOperationLog(commandText(command), QStringLiteral("PLC/模拟器"), ok ? QStringLiteral("成功") : QStringLiteral("失败"), message);
+
+    if (ok && command == upkun::domain::DeviceCommand::AlarmAck && m_alarmService != nullptr) {
+        m_alarmService->acknowledgeCurrentAlarm(QStringLiteral("系统"));
+    }
+    refreshAlarmRecords();
+}
+
+void MainWindow::refreshAlarmRecords()
+{
+    if (m_alarmPage == nullptr || m_alarmService == nullptr) {
+        return;
+    }
+
+    m_alarmPage->setAlarmRows(m_alarmService->recentAlarmRows());
+    m_alarmPage->setOperationRows(m_alarmService->recentOperationRows());
 }
 
 void MainWindow::startSimulator()
@@ -171,10 +195,14 @@ void MainWindow::startSimulator()
     QString errorMessage;
     if (!m_simulatedServer->start(QHostAddress::LocalHost, 1502, &errorMessage)) {
         m_alarmLabel->setText(QStringLiteral("模拟器启动失败：%1").arg(errorMessage));
+        appendOperationLog(QStringLiteral("启动模拟器"), QStringLiteral("127.0.0.1:1502"), QStringLiteral("失败"), errorMessage);
+        refreshAlarmRecords();
         return;
     }
 
     m_simulatorPage->setListening(true);
+    appendOperationLog(QStringLiteral("启动模拟器"), QStringLiteral("127.0.0.1:1502"), QStringLiteral("成功"), QStringLiteral("监听中"));
+    refreshAlarmRecords();
     upkun::domain::DeviceConnectionConfig config;
     m_deviceClient->connectToDevice(config);
 }
@@ -184,6 +212,8 @@ void MainWindow::stopSimulator()
     m_deviceClient->disconnectFromDevice();
     m_simulatedServer->stop();
     m_simulatorPage->setListening(false);
+    appendOperationLog(QStringLiteral("停止模拟器"), QStringLiteral("127.0.0.1:1502"), QStringLiteral("成功"), QStringLiteral("已停止监听"));
+    refreshAlarmRecords();
 }
 
 QWidget* MainWindow::createStatusHeader()
@@ -230,6 +260,7 @@ QWidget* MainWindow::createNavigation()
 
     m_navigation = new QListWidget(frame);
     m_navigation->addItem(new QListWidgetItem(QStringLiteral("主监控")));
+    m_navigation->addItem(new QListWidgetItem(QStringLiteral("报警记录")));
     m_navigation->addItem(new QListWidgetItem(QStringLiteral("模拟器")));
     layout->addWidget(m_navigation);
 
@@ -262,6 +293,24 @@ QLabel* MainWindow::makeStatusLabel(const QString& title, const QString& value)
     return label;
 }
 
+void MainWindow::setupStorage()
+{
+    QString errorMessage;
+    if (!m_databaseManager.open(QStringLiteral("data/app.sqlite3"), &errorMessage)) {
+        m_alarmLabel->setText(QStringLiteral("数据库初始化失败：%1").arg(errorMessage));
+        return;
+    }
+
+    m_alarmService = new upkun::services::AlarmService(&m_alarmRepository, &m_operationLogRepository, this);
+    connect(m_alarmService, &upkun::services::AlarmService::recordsChanged,
+        this, &MainWindow::refreshAlarmRecords);
+    connect(m_alarmPage, &upkun::ui::AlarmPage::refreshRequested,
+        this, &MainWindow::refreshAlarmRecords);
+
+    appendOperationLog(QStringLiteral("启动程序"), QStringLiteral("数据库"), QStringLiteral("成功"), QStringLiteral("data/app.sqlite3"));
+    refreshAlarmRecords();
+}
+
 void MainWindow::setupDeviceLink()
 {
     m_simulatedServer = new upkun::simulator::SimulatedModbusServer(this);
@@ -282,12 +331,27 @@ void MainWindow::setupDeviceLink()
         this, &MainWindow::stopSimulator);
     connect(m_simulatorPage, &upkun::ui::SimulatorPage::faultRequested,
         m_simulatedServer, &upkun::simulator::SimulatedModbusServer::triggerAlarm);
+    connect(m_simulatorPage, &upkun::ui::SimulatorPage::faultRequested,
+        this, [this](int alarmCode) {
+            appendOperationLog(QStringLiteral("触发模拟故障"), QString::number(alarmCode), QStringLiteral("成功"), QStringLiteral("模拟器页面"));
+            refreshAlarmRecords();
+        });
     connect(m_simulatorPage, &upkun::ui::SimulatorPage::clearFaultRequested,
         m_simulatedServer, &upkun::simulator::SimulatedModbusServer::clearAlarm);
+    connect(m_simulatorPage, &upkun::ui::SimulatorPage::clearFaultRequested,
+        this, [this] {
+            appendOperationLog(QStringLiteral("清除模拟故障"), QStringLiteral("模拟器"), QStringLiteral("成功"), QStringLiteral("模拟器页面"));
+            refreshAlarmRecords();
+        });
     connect(m_simulatedServer, &upkun::simulator::SimulatedModbusServer::listeningChanged,
         m_simulatorPage, &upkun::ui::SimulatorPage::setListening);
 
     startSimulator();
+}
+
+void MainWindow::appendOperationLog(const QString& action, const QString& target, const QString& result, const QString& message)
+{
+    m_operationLogRepository.append(action, target, result, message);
 }
 
 } // namespace upkun::app
