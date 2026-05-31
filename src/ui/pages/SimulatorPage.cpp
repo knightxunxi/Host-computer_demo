@@ -14,14 +14,15 @@ SimulatorPage::SimulatorPage(QWidget* parent)
     auto* rootLayout = new QVBoxLayout(this);
     rootLayout->setContentsMargins(24, 20, 24, 20);
     rootLayout->setSpacing(18);
+    setStyleSheet(QStringLiteral("QWidget { background: #ffffff; color: #000000; }"));
 
     auto* title = new QLabel(QStringLiteral("模拟器"), this);
-    title->setStyleSheet(QStringLiteral("font-size: 24px; font-weight: 700; color: #111827;"));
+    title->setStyleSheet(QStringLiteral("font-size: 24px; font-weight: 700; color: #000000;"));
     rootLayout->addWidget(title);
 
     auto* hint = new QLabel(QStringLiteral("后续这里用于启动虚拟 PLC、设置合格率、触发缺瓶/堵瓶/缺盖/急停等模拟故障。"), this);
     hint->setWordWrap(true);
-    hint->setStyleSheet(QStringLiteral("color: #4b5563;"));
+    hint->setStyleSheet(QStringLiteral("color: #000000;"));
     rootLayout->addWidget(hint);
 
     m_listeningLabel = new QLabel(QStringLiteral("监听状态：未启动"), this);
@@ -34,8 +35,10 @@ SimulatorPage::SimulatorPage(QWidget* parent)
     auto* panel = new QFrame(this);
     panel->setObjectName(QStringLiteral("simPanel"));
     panel->setStyleSheet(QStringLiteral(
-        "#simPanel { background: #ffffff; border: 1px solid #d8dee6; border-radius: 6px; }"
-        "QPushButton { min-height: 34px; padding: 0 16px; }"));
+        "#simPanel { background: #ffffff; border: 1px solid #d0d0d0; border-radius: 4px; }"
+        "QPushButton { background: #f5f5f5; color: #000000; border: 1px solid #a0a0a0; min-height: 34px; padding: 0 16px; }"
+        "QPushButton:hover { background: #eeeeee; }"
+        "QPushButton:pressed { background: #dddddd; }"));
 
     auto* grid = new QGridLayout(panel);
     grid->setContentsMargins(16, 16, 16, 16);

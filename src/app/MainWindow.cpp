@@ -192,8 +192,8 @@ QWidget* MainWindow::createStatusHeader()
     header->setObjectName(QStringLiteral("statusHeader"));
     header->setMinimumHeight(64);
     header->setStyleSheet(QStringLiteral(
-        "#statusHeader { background: #20252b; color: #f7f9fb; }"
-        "QLabel { color: #f7f9fb; }"));
+        "#statusHeader { background: #ffffff; color: #000000; border-bottom: 1px solid #d0d0d0; }"
+        "QLabel { color: #000000; }"));
 
     auto* layout = new QHBoxLayout(header);
     layout->setContentsMargins(16, 10, 16, 10);
@@ -219,10 +219,11 @@ QWidget* MainWindow::createNavigation()
     frame->setObjectName(QStringLiteral("navigationPanel"));
     frame->setFixedWidth(180);
     frame->setStyleSheet(QStringLiteral(
-        "#navigationPanel { background: #f3f5f7; border-right: 1px solid #d6dce2; }"
-        "QListWidget { background: transparent; border: none; font-size: 15px; }"
-        "QListWidget::item { padding: 14px 16px; }"
-        "QListWidget::item:selected { background: #dbeafe; color: #0f172a; }"));
+        "#navigationPanel { background: #fafafa; border-right: 1px solid #d0d0d0; }"
+        "QListWidget { background: #fafafa; color: #000000; border: none; font-size: 15px; }"
+        "QListWidget::item { color: #000000; padding: 14px 16px; border-bottom: 1px solid #eeeeee; }"
+        "QListWidget::item:selected { background: #e8e8e8; color: #000000; border-left: 4px solid #000000; }"
+        "QListWidget::item:hover { background: #f0f0f0; color: #000000; }"));
 
     auto* layout = new QVBoxLayout(frame);
     layout->setContentsMargins(0, 12, 0, 12);
@@ -241,8 +242,8 @@ QWidget* MainWindow::createAlarmFooter()
     footer->setObjectName(QStringLiteral("alarmFooter"));
     footer->setMinimumHeight(42);
     footer->setStyleSheet(QStringLiteral(
-        "#alarmFooter { background: #fff7ed; border-top: 1px solid #fed7aa; }"
-        "QLabel { color: #9a3412; font-weight: 600; }"));
+        "#alarmFooter { background: #ffffff; border-top: 1px solid #d0d0d0; }"
+        "QLabel { color: #000000; font-weight: 600; }"));
 
     auto* layout = new QHBoxLayout(footer);
     layout->setContentsMargins(16, 0, 16, 0);

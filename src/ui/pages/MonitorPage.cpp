@@ -48,9 +48,10 @@ MonitorPage::MonitorPage(QWidget* parent)
     auto* rootLayout = new QVBoxLayout(this);
     rootLayout->setContentsMargins(24, 20, 24, 20);
     rootLayout->setSpacing(18);
+    setStyleSheet(QStringLiteral("QWidget { background: #ffffff; color: #000000; }"));
 
     auto* title = new QLabel(QStringLiteral("主监控"), this);
-    title->setStyleSheet(QStringLiteral("font-size: 24px; font-weight: 700; color: #111827;"));
+    title->setStyleSheet(QStringLiteral("font-size: 24px; font-weight: 700; color: #000000;"));
     rootLayout->addWidget(title);
 
     auto* stationLayout = new QHBoxLayout();
@@ -103,8 +104,8 @@ QWidget* MonitorPage::createStationCard(const QString& title, const QString& sta
     card->setObjectName(QStringLiteral("stationCard"));
     card->setMinimumHeight(90);
     card->setStyleSheet(QStringLiteral(
-        "#stationCard { background: white; border: 1px solid #d8dee6; border-radius: 6px; }"
-        "QLabel { color: #111827; }"));
+        "#stationCard { background: #ffffff; border: 1px solid #d0d0d0; border-radius: 4px; }"
+        "QLabel { background: transparent; color: #000000; }"));
 
     auto* layout = new QVBoxLayout(card);
     layout->setContentsMargins(10, 10, 10, 10);
@@ -116,7 +117,7 @@ QWidget* MonitorPage::createStationCard(const QString& title, const QString& sta
 
     auto* stateLabel = new QLabel(state, card);
     stateLabel->setAlignment(Qt::AlignCenter);
-    stateLabel->setStyleSheet(QStringLiteral("color: #2563eb; font-weight: 600;"));
+    stateLabel->setStyleSheet(QStringLiteral("background: transparent; color: #000000; font-weight: 600;"));
     m_stationStateLabels.append(stateLabel);
 
     layout->addWidget(nameLabel);
@@ -132,15 +133,16 @@ QWidget* MonitorPage::createMetricCard(const QString& title, const QString& valu
     card->setObjectName(QStringLiteral("metricCard"));
     card->setMinimumHeight(88);
     card->setStyleSheet(QStringLiteral(
-        "#metricCard { background: #ffffff; border: 1px solid #d8dee6; border-radius: 6px; }"));
+        "#metricCard { background: #ffffff; border: 1px solid #d0d0d0; border-radius: 4px; }"
+        "QLabel { background: transparent; color: #000000; }"));
 
     auto* layout = new QVBoxLayout(card);
     layout->setContentsMargins(14, 10, 14, 10);
 
     auto* titleLabel = new QLabel(title, card);
-    titleLabel->setStyleSheet(QStringLiteral("color: #6b7280;"));
+    titleLabel->setStyleSheet(QStringLiteral("background: transparent; color: #000000;"));
     auto* actualValueLabel = new QLabel(value, card);
-    actualValueLabel->setStyleSheet(QStringLiteral("font-size: 22px; font-weight: 700; color: #111827;"));
+    actualValueLabel->setStyleSheet(QStringLiteral("background: transparent; font-size: 22px; font-weight: 700; color: #000000;"));
     if (valueLabel != nullptr) {
         *valueLabel = actualValueLabel;
     }
@@ -158,8 +160,10 @@ void MonitorPage::addControlButtons(QGridLayout* layout)
     panel->setObjectName(QStringLiteral("controlPanel"));
     panel->setMinimumHeight(96);
     panel->setStyleSheet(QStringLiteral(
-        "#controlPanel { background: #f8fafc; border: 1px solid #d8dee6; border-radius: 6px; }"
-        "QPushButton { min-height: 34px; padding: 0 18px; font-weight: 600; }"));
+        "#controlPanel { background: #ffffff; border: 1px solid #d0d0d0; border-radius: 4px; }"
+        "QPushButton { background: #f5f5f5; color: #000000; border: 1px solid #a0a0a0; min-height: 34px; padding: 0 18px; font-weight: 600; }"
+        "QPushButton:hover { background: #eeeeee; }"
+        "QPushButton:pressed { background: #dddddd; }"));
 
     auto* row = new QHBoxLayout(panel);
     row->setContentsMargins(14, 12, 14, 12);
