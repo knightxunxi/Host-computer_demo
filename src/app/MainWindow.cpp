@@ -2,16 +2,19 @@
 
 #include "device/ModbusTcpClient.h"
 #include "simulator/SimulatedModbusServer.h"
+#include "ui/dialogs/LoginDialog.h"
 #include "ui/pages/AlarmPage.h"
 #include "ui/pages/MonitorPage.h"
 #include "ui/pages/RecipePage.h"
 #include "ui/pages/SimulatorPage.h"
 #include "ui/pages/TrendPage.h"
 
+#include <QDialog>
 #include <QFrame>
 #include <QHostAddress>
 #include <QHBoxLayout>
 #include <QListWidgetItem>
+#include <QPushButton>
 #include <QVBoxLayout>
 #include <QWidget>
 
@@ -97,6 +100,19 @@ QString commandText(upkun::domain::DeviceCommand command)
     return QStringLiteral("命令");
 }
 
+int roleRank(upkun::domain::UserRole role)
+{
+    switch (role) {
+    case upkun::domain::UserRole::Operator:
+        return 1;
+    case upkun::domain::UserRole::Engineer:
+        return 2;
+    case upkun::domain::UserRole::Administrator:
+        return 3;
+    }
+    return 0;
+}
+
 } // namespace
 
 namespace upkun::app {
@@ -140,6 +156,8 @@ MainWindow::MainWindow(QWidget* parent)
     setCentralWidget(root);
 
     connect(m_navigation, &QListWidget::currentRowChanged, this, &MainWindow::handleNavigationChanged);
+    connect(&m_userSession, &upkun::services::UserSessionService::currentUserChanged,
+        this, &MainWindow::handleCurrentUserChanged);
     m_navigation->setCurrentRow(0);
 
     setupStorage();
@@ -188,7 +206,12 @@ void MainWindow::handleCommandFinished(upkun::domain::DeviceCommand command, boo
     appendOperationLog(commandText(command), QStringLiteral("PLC/模拟器"), ok ? QStringLiteral("成功") : QStringLiteral("失败"), message);
 
     if (ok && command == upkun::domain::DeviceCommand::AlarmAck && m_alarmService != nullptr) {
-        m_alarmService->acknowledgeCurrentAlarm(QStringLiteral("系统"));
+        const auto user = m_userSession.currentUser();
+        if (user.has_value()) {
+            m_alarmService->acknowledgeCurrentAlarm(*user);
+        } else {
+            m_alarmService->acknowledgeCurrentAlarm(currentUserDisplayName());
+        }
     }
     refreshAlarmRecords();
 }
@@ -205,22 +228,23 @@ void MainWindow::refreshAlarmRecords()
 
 void MainWindow::saveRecipe(upkun::domain::RecipeParameters recipe)
 {
-    QString errorMessage;
-    if (!m_recipeRepository.save(recipe, &errorMessage)) {
-        m_alarmLabel->setText(QStringLiteral("保存配方失败：%1").arg(errorMessage));
-        appendOperationLog(QStringLiteral("保存配方"), recipe.name, QStringLiteral("失败"), errorMessage);
-        refreshAlarmRecords();
+    if (!ensureRole(upkun::domain::UserRole::Engineer, QStringLiteral("保存配方"))) {
         return;
     }
 
-    m_alarmLabel->setText(QStringLiteral("配方已保存：%1").arg(recipe.name));
-    appendOperationLog(QStringLiteral("保存配方"), recipe.name, QStringLiteral("成功"), QStringLiteral("SQLite"));
-    refreshAlarmRecords();
+    persistRecipe(recipe);
 }
 
 void MainWindow::applyRecipe(upkun::domain::RecipeParameters recipe)
 {
-    saveRecipe(recipe);
+    if (!ensureRole(upkun::domain::UserRole::Engineer, QStringLiteral("下发配方"))) {
+        return;
+    }
+
+    if (!persistRecipe(recipe)) {
+        return;
+    }
+
     m_deviceClient->writeRecipe(recipe);
     m_alarmLabel->setText(QStringLiteral("配方已下发：%1").arg(recipe.name));
     appendOperationLog(QStringLiteral("下发配方"), recipe.name, QStringLiteral("成功"), QStringLiteral("Holding Registers 40001-40010"));
@@ -269,6 +293,43 @@ void MainWindow::stopSimulator()
     refreshAlarmRecords();
 }
 
+void MainWindow::switchUser()
+{
+    const auto users = m_userRepository.enabledUsers();
+    upkun::ui::LoginDialog dialog(users, this);
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+
+    QString errorMessage;
+    auto user = m_userRepository.authenticate(dialog.loginName(), dialog.password(), &errorMessage);
+    if (!user.has_value()) {
+        m_alarmLabel->setText(QStringLiteral("切换用户失败：%1").arg(errorMessage));
+        appendOperationLog(QStringLiteral("切换用户"), dialog.loginName(), QStringLiteral("失败"), errorMessage);
+        refreshAlarmRecords();
+        return;
+    }
+
+    const QString previousUser = currentUserDisplayName();
+    m_userSession.setCurrentUser(*user);
+    m_alarmLabel->setText(QStringLiteral("当前用户已切换：%1").arg(user->displayName));
+    appendOperationLog(QStringLiteral("切换用户"), user->loginName, QStringLiteral("成功"),
+        QStringLiteral("%1 -> %2").arg(previousUser, user->displayName));
+    refreshAlarmRecords();
+}
+
+void MainWindow::handleCurrentUserChanged()
+{
+    const auto user = m_userSession.currentUser();
+    if (user.has_value()) {
+        m_userLabel->setText(QStringLiteral("当前用户：%1（%2）")
+                .arg(user->displayName, upkun::domain::userRoleText(user->role)));
+        return;
+    }
+
+    m_userLabel->setText(QStringLiteral("当前用户：未登录"));
+}
+
 QWidget* MainWindow::createStatusHeader()
 {
     auto* header = new QFrame(this);
@@ -286,12 +347,19 @@ QWidget* MainWindow::createStatusHeader()
     m_modeLabel = makeStatusLabel(QStringLiteral("当前模式"), QStringLiteral("自动"));
     m_connectionLabel = makeStatusLabel(QStringLiteral("PLC通信"), QStringLiteral("未连接"));
     m_userLabel = makeStatusLabel(QStringLiteral("当前用户"), QStringLiteral("未登录"));
+    m_switchUserButton = new QPushButton(QStringLiteral("切换用户"), header);
+    m_switchUserButton->setStyleSheet(QStringLiteral(
+        "QPushButton { background: #f5f5f5; color: #000000; border: 1px solid #a0a0a0; min-height: 30px; padding: 0 14px; }"
+        "QPushButton:hover { background: #eeeeee; }"
+        "QPushButton:pressed { background: #dddddd; }"));
+    connect(m_switchUserButton, &QPushButton::clicked, this, &MainWindow::switchUser);
 
     layout->addWidget(m_systemStateLabel);
     layout->addWidget(m_modeLabel);
     layout->addWidget(m_connectionLabel);
     layout->addStretch(1);
     layout->addWidget(m_userLabel);
+    layout->addWidget(m_switchUserButton);
 
     return header;
 }
@@ -356,6 +424,13 @@ void MainWindow::setupStorage()
         return;
     }
 
+    QString userError;
+    if (!m_userRepository.ensureDefaultUsers(&userError)) {
+        m_alarmLabel->setText(QStringLiteral("默认用户初始化失败：%1").arg(userError));
+    } else {
+        loginDefaultOperator();
+    }
+
     QString recipeError;
     if (!m_recipeRepository.ensureDefaultRecipe(&recipeError)) {
         m_alarmLabel->setText(QStringLiteral("默认配方初始化失败：%1").arg(recipeError));
@@ -417,8 +492,72 @@ void MainWindow::setupDeviceLink()
     startSimulator();
 }
 
+void MainWindow::loginDefaultOperator()
+{
+    auto user = m_userRepository.findEnabledByLoginName(QStringLiteral("op001"));
+    if (!user.has_value()) {
+        m_userSession.clear();
+        return;
+    }
+
+    QString errorMessage;
+    m_userRepository.updateLastLogin(user->id, &errorMessage);
+    m_userSession.setCurrentUser(*user);
+}
+
+QString MainWindow::currentUserDisplayName() const
+{
+    const auto user = m_userSession.currentUser();
+    return user.has_value() ? user->displayName : QStringLiteral("未登录");
+}
+
+bool MainWindow::ensureRole(upkun::domain::UserRole minimumRole, const QString& action)
+{
+    const auto user = m_userSession.currentUser();
+    if (!user.has_value()) {
+        const QString message = QStringLiteral("请先切换到有权限的用户");
+        m_alarmLabel->setText(QStringLiteral("%1被拒绝：%2").arg(action, message));
+        appendOperationLog(action, QStringLiteral("权限"), QStringLiteral("拒绝"), message);
+        refreshAlarmRecords();
+        return false;
+    }
+
+    if (roleRank(user->role) < roleRank(minimumRole)) {
+        const QString message = QStringLiteral("当前角色为%1，至少需要%2")
+                .arg(upkun::domain::userRoleText(user->role), upkun::domain::userRoleText(minimumRole));
+        m_alarmLabel->setText(QStringLiteral("%1被拒绝：%2").arg(action, message));
+        appendOperationLog(action, QStringLiteral("权限"), QStringLiteral("拒绝"), message);
+        refreshAlarmRecords();
+        return false;
+    }
+
+    return true;
+}
+
+bool MainWindow::persistRecipe(const upkun::domain::RecipeParameters& recipe)
+{
+    QString errorMessage;
+    if (!m_recipeRepository.save(recipe, &errorMessage)) {
+        m_alarmLabel->setText(QStringLiteral("保存配方失败：%1").arg(errorMessage));
+        appendOperationLog(QStringLiteral("保存配方"), recipe.name, QStringLiteral("失败"), errorMessage);
+        refreshAlarmRecords();
+        return false;
+    }
+
+    m_alarmLabel->setText(QStringLiteral("配方已保存：%1").arg(recipe.name));
+    appendOperationLog(QStringLiteral("保存配方"), recipe.name, QStringLiteral("成功"), QStringLiteral("SQLite"));
+    refreshAlarmRecords();
+    return true;
+}
+
 void MainWindow::appendOperationLog(const QString& action, const QString& target, const QString& result, const QString& message)
 {
+    const auto user = m_userSession.currentUser();
+    if (user.has_value()) {
+        m_operationLogRepository.append(*user, action, target, result, message);
+        return;
+    }
+
     m_operationLogRepository.append(action, target, result, message);
 }
 

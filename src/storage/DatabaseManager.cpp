@@ -62,6 +62,22 @@ bool DatabaseManager::initializeSchema(QString* errorMessage)
             ON alarms(alarm_code, state)
         )SQL"),
         QStringLiteral(R"SQL(
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                login_name TEXT NOT NULL UNIQUE,
+                display_name TEXT NOT NULL,
+                role TEXT NOT NULL,
+                enabled INTEGER NOT NULL DEFAULT 1,
+                password_hash TEXT NOT NULL,
+                last_login_at TEXT,
+                created_at TEXT NOT NULL
+            )
+        )SQL"),
+        QStringLiteral(R"SQL(
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_users_login_name
+            ON users(login_name)
+        )SQL"),
+        QStringLiteral(R"SQL(
             CREATE TABLE IF NOT EXISTS operation_logs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER,

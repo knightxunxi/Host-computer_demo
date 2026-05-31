@@ -1,6 +1,7 @@
 #pragma once
 
 #include "domain/DeviceTypes.h"
+#include "domain/User.h"
 
 #include <QObject>
 #include <QStringList>
@@ -23,6 +24,7 @@ public:
 
     void processSnapshot(const upkun::domain::DeviceSnapshot& snapshot);
     void acknowledgeCurrentAlarm(const QString& userName);
+    void acknowledgeCurrentAlarm(const upkun::domain::User& user);
     QVector<QStringList> recentAlarmRows(int limit = 50) const;
     QVector<QStringList> recentOperationRows(int limit = 50) const;
 

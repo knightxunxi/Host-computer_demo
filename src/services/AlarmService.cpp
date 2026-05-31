@@ -55,6 +55,19 @@ void AlarmService::acknowledgeCurrentAlarm(const QString& userName)
     emit recordsChanged();
 }
 
+void AlarmService::acknowledgeCurrentAlarm(const upkun::domain::User& user)
+{
+    if (m_currentAlarmCode == 0 || m_alarmRepository == nullptr) {
+        return;
+    }
+
+    m_alarmRepository->acknowledgeOpenAlarm(m_currentAlarmCode, user.displayName);
+    if (m_operationLogRepository != nullptr) {
+        m_operationLogRepository->append(user, QStringLiteral("报警确认"), QString::number(m_currentAlarmCode), QStringLiteral("成功"), user.displayName);
+    }
+    emit recordsChanged();
+}
+
 QVector<QStringList> AlarmService::recentAlarmRows(int limit) const
 {
     return m_alarmRepository != nullptr ? m_alarmRepository->recentRows(limit) : QVector<QStringList> {};

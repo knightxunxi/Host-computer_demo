@@ -32,6 +32,8 @@ qt_add_executable(UpkunHmi WIN32
     src/ui/pages/TrendPage.cpp
     src/ui/pages/SimulatorPage.h
     src/ui/pages/SimulatorPage.cpp
+    src/ui/dialogs/LoginDialog.h
+    src/ui/dialogs/LoginDialog.cpp
     src/domain/DeviceTypes.h
     src/domain/AlarmTypes.h
     src/domain/Recipe.h
@@ -56,6 +58,8 @@ qt_add_executable(UpkunHmi WIN32
     src/storage/AlarmRepository.cpp
     src/storage/OperationLogRepository.h
     src/storage/OperationLogRepository.cpp
+    src/storage/UserRepository.h
+    src/storage/UserRepository.cpp
     src/storage/RecipeRepository.h
     src/storage/RecipeRepository.cpp
     src/storage/TrendRepository.h
