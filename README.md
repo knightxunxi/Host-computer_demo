@@ -34,6 +34,7 @@
 - [Modbus TCP 模拟链路说明](docs/06-modbus-simulation.md)
 - [报警与操作日志模块说明](docs/07-alarm-and-operation-log.md)
 - [配方、趋势曲线与 CSV 导出说明](docs/08-recipe-trend-export.md)
+- [测试与部署说明](docs/09-test-and-deployment.md)
 
 ## 当前实现能力
 
@@ -61,6 +62,18 @@ cmake --build build
 
 ```powershell
 .\build\upkun-hmi.exe
+```
+
+烟测：
+
+```powershell
+.\scripts\smoke_test.ps1
+```
+
+打包：
+
+```powershell
+.\scripts\package_release.ps1
 ```
 
 ## 阶段路线
