@@ -1,13 +1,100 @@
 #include "app/MainWindow.h"
 
+#include "device/ModbusTcpClient.h"
+#include "simulator/SimulatedModbusServer.h"
 #include "ui/pages/MonitorPage.h"
 #include "ui/pages/SimulatorPage.h"
 
 #include <QFrame>
+#include <QHostAddress>
 #include <QHBoxLayout>
 #include <QListWidgetItem>
 #include <QVBoxLayout>
 #include <QWidget>
+
+namespace {
+
+QString systemStateText(upkun::domain::SystemState state)
+{
+    switch (state) {
+    case upkun::domain::SystemState::Stopped:
+        return QStringLiteral("停止");
+    case upkun::domain::SystemState::Standby:
+        return QStringLiteral("待机");
+    case upkun::domain::SystemState::Running:
+        return QStringLiteral("运行中");
+    case upkun::domain::SystemState::Paused:
+        return QStringLiteral("暂停");
+    case upkun::domain::SystemState::Alarm:
+        return QStringLiteral("报警");
+    case upkun::domain::SystemState::EmergencyStop:
+        return QStringLiteral("急停");
+    case upkun::domain::SystemState::Resetting:
+        return QStringLiteral("复位中");
+    }
+    return QStringLiteral("未知");
+}
+
+QString runModeText(upkun::domain::RunMode mode)
+{
+    switch (mode) {
+    case upkun::domain::RunMode::Manual:
+        return QStringLiteral("手动");
+    case upkun::domain::RunMode::Auto:
+        return QStringLiteral("自动");
+    case upkun::domain::RunMode::Maintenance:
+        return QStringLiteral("维护");
+    case upkun::domain::RunMode::Unknown:
+        return QStringLiteral("未知");
+    }
+    return QStringLiteral("未知");
+}
+
+QString connectionStateText(upkun::domain::ConnectionState state)
+{
+    switch (state) {
+    case upkun::domain::ConnectionState::Disconnected:
+        return QStringLiteral("断开");
+    case upkun::domain::ConnectionState::Connecting:
+        return QStringLiteral("连接中");
+    case upkun::domain::ConnectionState::Connected:
+        return QStringLiteral("已连接");
+    case upkun::domain::ConnectionState::Reconnecting:
+        return QStringLiteral("重连中");
+    case upkun::domain::ConnectionState::Error:
+        return QStringLiteral("错误");
+    }
+    return QStringLiteral("未知");
+}
+
+QString commandText(upkun::domain::DeviceCommand command)
+{
+    switch (command) {
+    case upkun::domain::DeviceCommand::Start:
+        return QStringLiteral("启动");
+    case upkun::domain::DeviceCommand::Stop:
+        return QStringLiteral("停止");
+    case upkun::domain::DeviceCommand::Reset:
+        return QStringLiteral("复位");
+    case upkun::domain::DeviceCommand::AlarmAck:
+        return QStringLiteral("报警确认");
+    case upkun::domain::DeviceCommand::ModeAuto:
+        return QStringLiteral("自动模式");
+    case upkun::domain::DeviceCommand::ModeManual:
+        return QStringLiteral("手动模式");
+    case upkun::domain::DeviceCommand::BatchStart:
+        return QStringLiteral("开始批次");
+    case upkun::domain::DeviceCommand::BatchEnd:
+        return QStringLiteral("结束批次");
+    case upkun::domain::DeviceCommand::RejectTest:
+        return QStringLiteral("剔除测试");
+    case upkun::domain::DeviceCommand::SimFault:
+        return QStringLiteral("模拟故障");
+    }
+    return QStringLiteral("命令");
+}
+
+} // namespace
 
 namespace upkun::app {
 
@@ -32,8 +119,10 @@ MainWindow::MainWindow(QWidget* parent)
     bodyLayout->addWidget(createNavigation());
 
     m_pages = new QStackedWidget(body);
-    m_pages->addWidget(new upkun::ui::MonitorPage(m_pages));
-    m_pages->addWidget(new upkun::ui::SimulatorPage(m_pages));
+    m_monitorPage = new upkun::ui::MonitorPage(m_pages);
+    m_simulatorPage = new upkun::ui::SimulatorPage(m_pages);
+    m_pages->addWidget(m_monitorPage);
+    m_pages->addWidget(m_simulatorPage);
     bodyLayout->addWidget(m_pages, 1);
 
     rootLayout->addWidget(body, 1);
@@ -43,6 +132,8 @@ MainWindow::MainWindow(QWidget* parent)
 
     connect(m_navigation, &QListWidget::currentRowChanged, this, &MainWindow::handleNavigationChanged);
     m_navigation->setCurrentRow(0);
+
+    setupDeviceLink();
 }
 
 void MainWindow::handleNavigationChanged(int row)
@@ -50,6 +141,49 @@ void MainWindow::handleNavigationChanged(int row)
     if (row >= 0 && row < m_pages->count()) {
         m_pages->setCurrentIndex(row);
     }
+}
+
+void MainWindow::handleSnapshotUpdated(const upkun::domain::DeviceSnapshot& snapshot)
+{
+    m_systemStateLabel->setText(QStringLiteral("系统状态：%1").arg(systemStateText(snapshot.systemState)));
+    m_modeLabel->setText(QStringLiteral("当前模式：%1").arg(runModeText(snapshot.currentMode)));
+    m_alarmLabel->setText(snapshot.currentAlarmCode == 0
+            ? QStringLiteral("当前报警：无")
+            : QStringLiteral("当前报警：%1").arg(snapshot.currentAlarmCode));
+
+    m_monitorPage->updateSnapshot(snapshot);
+    m_simulatorPage->updateSnapshot(snapshot);
+}
+
+void MainWindow::handleConnectionChanged(upkun::domain::ConnectionState state)
+{
+    m_connectionLabel->setText(QStringLiteral("PLC通信：%1").arg(connectionStateText(state)));
+}
+
+void MainWindow::handleCommandFinished(upkun::domain::DeviceCommand command, bool ok, const QString& message)
+{
+    m_alarmLabel->setText(QStringLiteral("命令反馈：%1 %2，%3")
+            .arg(commandText(command), ok ? QStringLiteral("成功") : QStringLiteral("失败"), message));
+}
+
+void MainWindow::startSimulator()
+{
+    QString errorMessage;
+    if (!m_simulatedServer->start(QHostAddress::LocalHost, 1502, &errorMessage)) {
+        m_alarmLabel->setText(QStringLiteral("模拟器启动失败：%1").arg(errorMessage));
+        return;
+    }
+
+    m_simulatorPage->setListening(true);
+    upkun::domain::DeviceConnectionConfig config;
+    m_deviceClient->connectToDevice(config);
+}
+
+void MainWindow::stopSimulator()
+{
+    m_deviceClient->disconnectFromDevice();
+    m_simulatedServer->stop();
+    m_simulatorPage->setListening(false);
 }
 
 QWidget* MainWindow::createStatusHeader()
@@ -125,6 +259,34 @@ QLabel* MainWindow::makeStatusLabel(const QString& title, const QString& value)
     auto* label = new QLabel(QStringLiteral("%1：%2").arg(title, value), this);
     label->setMinimumWidth(150);
     return label;
+}
+
+void MainWindow::setupDeviceLink()
+{
+    m_simulatedServer = new upkun::simulator::SimulatedModbusServer(this);
+    m_deviceClient = new upkun::device::ModbusTcpClient(this);
+
+    connect(m_deviceClient, &upkun::device::ModbusTcpClient::connectionChanged,
+        this, &MainWindow::handleConnectionChanged);
+    connect(m_deviceClient, &upkun::device::ModbusTcpClient::snapshotUpdated,
+        this, &MainWindow::handleSnapshotUpdated);
+    connect(m_deviceClient, &upkun::device::ModbusTcpClient::commandFinished,
+        this, &MainWindow::handleCommandFinished);
+    connect(m_monitorPage, &upkun::ui::MonitorPage::commandRequested,
+        m_deviceClient, &upkun::device::ModbusTcpClient::sendCommand);
+
+    connect(m_simulatorPage, &upkun::ui::SimulatorPage::startSimulatorRequested,
+        this, &MainWindow::startSimulator);
+    connect(m_simulatorPage, &upkun::ui::SimulatorPage::stopSimulatorRequested,
+        this, &MainWindow::stopSimulator);
+    connect(m_simulatorPage, &upkun::ui::SimulatorPage::faultRequested,
+        m_simulatedServer, &upkun::simulator::SimulatedModbusServer::triggerAlarm);
+    connect(m_simulatorPage, &upkun::ui::SimulatorPage::clearFaultRequested,
+        m_simulatedServer, &upkun::simulator::SimulatedModbusServer::clearAlarm);
+    connect(m_simulatedServer, &upkun::simulator::SimulatedModbusServer::listeningChanged,
+        m_simulatorPage, &upkun::ui::SimulatorPage::setListening);
+
+    startSimulator();
 }
 
 } // namespace upkun::app

@@ -15,6 +15,8 @@ int main(int argc, char* argv[])
 
     qRegisterMetaType<upkun::domain::DeviceCommand>("upkun::domain::DeviceCommand");
     qRegisterMetaType<upkun::domain::DeviceSnapshot>("upkun::domain::DeviceSnapshot");
+    qRegisterMetaType<upkun::domain::ConnectionState>("upkun::domain::ConnectionState");
+    qRegisterMetaType<upkun::domain::DeviceError>("upkun::domain::DeviceError");
 
     upkun::app::MainWindow window;
     window.show();

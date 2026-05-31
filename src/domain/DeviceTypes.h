@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QtGlobal>
 #include <QString>
 
 namespace upkun::domain {

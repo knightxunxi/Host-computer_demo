@@ -31,6 +31,15 @@
 - [项目路线图](docs/03-roadmap.md)
 - [产线模型与典型用例](docs/04-line-model-and-use-cases.md)
 - [总体设计](docs/05-overall-design.md)
+- [Modbus TCP 模拟链路说明](docs/06-modbus-simulation.md)
+
+## 当前实现能力
+
+- Qt Widgets 主窗口、主监控页和模拟器页。
+- 内置 Modbus TCP 模拟器，默认监听 `127.0.0.1:1502`。
+- Modbus TCP 客户端自动连接内置模拟器并轮询状态。
+- 主监控页可发送启动、停止、复位、报警确认命令。
+- 模拟器页可触发缺瓶、缺盖、缺标签报警并清除故障。
 
 ## 构建运行
 

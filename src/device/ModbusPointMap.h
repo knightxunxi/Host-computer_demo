@@ -2,6 +2,33 @@
 
 namespace upkun::device::modbus {
 
+struct Bases {
+    static constexpr int Coil = 1;
+    static constexpr int DiscreteInput = 10001;
+    static constexpr int InputRegister = 30001;
+    static constexpr int HoldingRegister = 40001;
+};
+
+constexpr int toCoilOffset(int address)
+{
+    return address - Bases::Coil;
+}
+
+constexpr int toDiscreteInputOffset(int address)
+{
+    return address - Bases::DiscreteInput;
+}
+
+constexpr int toInputRegisterOffset(int address)
+{
+    return address - Bases::InputRegister;
+}
+
+constexpr int toHoldingRegisterOffset(int address)
+{
+    return address - Bases::HoldingRegister;
+}
+
 struct Coils {
     static constexpr int CmdStart = 1;
     static constexpr int CmdStop = 2;

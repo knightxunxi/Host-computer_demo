@@ -35,7 +35,13 @@ qt_add_executable(UpkunHmi WIN32
     src/services/UserSessionService.h
     src/services/UserSessionService.cpp
     src/device/IDeviceClient.h
+    src/device/ModbusTcpClient.h
+    src/device/ModbusTcpClient.cpp
     src/device/ModbusPointMap.h
+    src/simulator/LineSimulator.h
+    src/simulator/LineSimulator.cpp
+    src/simulator/SimulatedModbusServer.h
+    src/simulator/SimulatedModbusServer.cpp
     src/storage/DatabaseManager.h
     src/storage/DatabaseManager.cpp
     src/infrastructure/AppConfig.h
