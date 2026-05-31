@@ -2,12 +2,13 @@
 
 ## 1. 当前实现范围
 
-本阶段完成 M7 的第一版能力：
+本阶段完成 M7 的第一版能力，并在 M11 扩展为多配方和下发追溯：
 
 ```text
 RecipePage
-  -> RecipeRepository 保存默认配方
+  -> RecipeRepository 保存/复制/加载多配方
   -> ModbusTcpClient.writeRecipe 下发 Holding Registers
+  -> RecipeRepository 记录 recipe_apply_logs
 
 DeviceSnapshot
   -> TrendPage 实时刷新曲线
@@ -19,8 +20,10 @@ DeviceSnapshot
 
 - 左侧新增“参数/配方”页面。
 - 支持编辑目标速度、灌装量、灌装时间、旋盖扭矩、重量上下限、贴标模式、批次目标、模拟合格率。
-- 支持保存配方到 SQLite `recipes` 表。
+- 支持保存配方到 SQLite `recipes` 表，保存同名配方时版本号自动递增。
+- 支持配方列表、加载配方、复制为新配方。
 - 支持将配方下发到模拟 PLC 的 `40001-40010` Holding Registers。
+- 支持保存配方下发记录到 `recipe_apply_logs` 表。
 - 左侧新增“趋势曲线”页面。
 - 趋势曲线实时显示速度、灌装量、重量。
 - 趋势采样写入 SQLite `trend_samples` 表。
@@ -43,7 +46,26 @@ weight_max
 label_mode
 batch_target_count
 simulation_quality_rate
+version
+created_at
 updated_at
+updated_by
+last_applied_at
+```
+
+### `recipe_apply_logs`
+
+主要字段：
+
+```text
+recipe_id
+recipe_name
+recipe_version
+display_name
+role
+target
+result
+created_at
 ```
 
 ### `trend_samples`
@@ -73,8 +95,11 @@ pressure
 1. 打开“参数/配方”页面。
 2. 修改目标速度或灌装量。
 3. 点击“保存配方”。
-4. 点击“下发到PLC/模拟器”。
-5. 打开“报警记录”页面，应看到保存/下发配方操作日志。
+4. 点击“复制为新配方”，应生成一个新配方名。
+5. 点击“保存配方”，配方列表应出现新配方；再次保存同名配方，版本号应递增。
+6. 点击“下发到PLC/模拟器”。
+7. 配方页下方“最近下发记录”应出现对应记录。
+8. 打开“报警记录”页面，应看到保存/下发配方操作日志。
 
 趋势验证：
 
@@ -91,7 +116,7 @@ python - <<'PY'
 import sqlite3
 conn = sqlite3.connect(r'data/app.sqlite3')
 cur = conn.cursor()
-for table in ('recipes', 'trend_samples'):
+for table in ('recipes', 'recipe_apply_logs', 'trend_samples'):
     cur.execute(f'select count(*) from {table}')
     print(table, cur.fetchone()[0])
 conn.close()
@@ -100,7 +125,7 @@ PY
 
 ## 4. 当前限制
 
-- 目前只有一个默认配方，后续再扩展配方列表、新增、删除和切换。
+- M11 已支持多配方、复制、版本递增和下发记录；删除、禁用、导入导出后续再扩展。
 - 趋势曲线只显示最近内存采样点，历史趋势查询后续再扩展。
 - CSV 导出当前只覆盖趋势数据，生产记录和报警报表导出后续再统一做报表中心。
 - M10 已新增批次管理第一版；趋势采样暂未写入批次号，后续报表中心再统一关联趋势、批次和报警数据。

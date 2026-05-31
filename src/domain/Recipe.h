@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QDateTime>
 #include <QString>
 
 namespace upkun::domain {
@@ -7,6 +8,7 @@ namespace upkun::domain {
 struct RecipeParameters {
     int id = 0;
     QString name = QStringLiteral("默认配方");
+    int version = 1;
     int targetSpeed = 60;
     int fillVolumeMl = 500;
     int fillTimeMs = 1000;
@@ -16,6 +18,10 @@ struct RecipeParameters {
     int labelMode = 1;
     int batchTargetCount = 1000;
     int simulationQualityRate = 98;
+    QString updatedBy = QStringLiteral("系统");
+    QDateTime createdAt;
+    QDateTime updatedAt;
+    QDateTime lastAppliedAt;
 };
 
 } // namespace upkun::domain

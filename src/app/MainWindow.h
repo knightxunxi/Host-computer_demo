@@ -53,8 +53,11 @@ private slots:
     void handleCommandFinished(upkun::domain::DeviceCommand command, bool ok, const QString& message);
     void refreshAlarmRecords();
     void refreshBatchRecords();
+    void refreshRecipeRecords();
     void startBatch(const QString& batchNo, int targetCount);
     void endBatch();
+    void loadRecipe(int recipeId);
+    void copyRecipe(upkun::domain::RecipeParameters recipe, QString newName);
     void saveRecipe(upkun::domain::RecipeParameters recipe);
     void applyRecipe(upkun::domain::RecipeParameters recipe);
     void exportTrendCsv();
@@ -79,7 +82,7 @@ private:
     int activeBatchBadCount() const;
     QString currentUserDisplayName() const;
     bool ensureRole(upkun::domain::UserRole minimumRole, const QString& action);
-    bool persistRecipe(const upkun::domain::RecipeParameters& recipe);
+    std::optional<upkun::domain::RecipeParameters> persistRecipe(const upkun::domain::RecipeParameters& recipe);
     void appendOperationLog(const QString& action, const QString& target, const QString& result, const QString& message);
 
     QLabel* m_systemStateLabel = nullptr;

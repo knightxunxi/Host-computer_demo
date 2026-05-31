@@ -6,6 +6,41 @@
 #include <QSqlError>
 #include <QSqlQuery>
 
+namespace {
+
+bool columnExists(const QString& tableName, const QString& columnName)
+{
+    QSqlQuery query(QStringLiteral("PRAGMA table_info(%1)").arg(tableName));
+    while (query.next()) {
+        if (query.value(QStringLiteral("name")).toString() == columnName) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool execStatement(const QString& statement, QString* errorMessage)
+{
+    QSqlQuery query;
+    if (query.exec(statement)) {
+        return true;
+    }
+    if (errorMessage != nullptr) {
+        *errorMessage = query.lastError().text();
+    }
+    return false;
+}
+
+bool addColumnIfMissing(const QString& tableName, const QString& columnName, const QString& definition, QString* errorMessage)
+{
+    if (columnExists(tableName, columnName)) {
+        return true;
+    }
+    return execStatement(QStringLiteral("ALTER TABLE %1 ADD COLUMN %2").arg(tableName, definition), errorMessage);
+}
+
+} // namespace
+
 namespace upkun::storage {
 
 bool DatabaseManager::open(const QString& databasePath, QString* errorMessage)
@@ -101,6 +136,7 @@ bool DatabaseManager::initializeSchema(QString* errorMessage)
             CREATE TABLE IF NOT EXISTS recipes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL UNIQUE,
+                version INTEGER NOT NULL DEFAULT 1,
                 target_speed INTEGER NOT NULL,
                 fill_volume INTEGER NOT NULL,
                 fill_time INTEGER NOT NULL,
@@ -110,8 +146,31 @@ bool DatabaseManager::initializeSchema(QString* errorMessage)
                 label_mode INTEGER NOT NULL,
                 batch_target_count INTEGER NOT NULL,
                 simulation_quality_rate INTEGER NOT NULL,
-                updated_at TEXT NOT NULL
+                created_at TEXT,
+                updated_at TEXT NOT NULL,
+                updated_by TEXT NOT NULL DEFAULT '系统',
+                last_applied_at TEXT
             )
+        )SQL"),
+        QStringLiteral(R"SQL(
+            CREATE TABLE IF NOT EXISTS recipe_apply_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                recipe_id INTEGER,
+                recipe_name TEXT NOT NULL,
+                recipe_version INTEGER NOT NULL,
+                user_id INTEGER,
+                login_name TEXT NOT NULL,
+                display_name TEXT NOT NULL,
+                role TEXT NOT NULL,
+                target TEXT NOT NULL,
+                result TEXT NOT NULL,
+                message TEXT,
+                created_at TEXT NOT NULL
+            )
+        )SQL"),
+        QStringLiteral(R"SQL(
+            CREATE INDEX IF NOT EXISTS idx_recipe_apply_logs_created_at
+            ON recipe_apply_logs(created_at)
         )SQL"),
         QStringLiteral(R"SQL(
             CREATE TABLE IF NOT EXISTS batches (
@@ -162,6 +221,27 @@ bool DatabaseManager::initializeSchema(QString* errorMessage)
             }
             return false;
         }
+    }
+
+    // M11 以后 recipes 表有版本和下发追踪字段，旧库通过 ALTER TABLE 补齐。
+    if (!addColumnIfMissing(QStringLiteral("recipes"), QStringLiteral("version"),
+            QStringLiteral("version INTEGER NOT NULL DEFAULT 1"), errorMessage)) {
+        return false;
+    }
+    if (!addColumnIfMissing(QStringLiteral("recipes"), QStringLiteral("created_at"),
+            QStringLiteral("created_at TEXT"), errorMessage)) {
+        return false;
+    }
+    if (!addColumnIfMissing(QStringLiteral("recipes"), QStringLiteral("updated_by"),
+            QStringLiteral("updated_by TEXT NOT NULL DEFAULT '系统'"), errorMessage)) {
+        return false;
+    }
+    if (!addColumnIfMissing(QStringLiteral("recipes"), QStringLiteral("last_applied_at"),
+            QStringLiteral("last_applied_at TEXT"), errorMessage)) {
+        return false;
+    }
+    if (!execStatement(QStringLiteral("UPDATE recipes SET created_at = updated_at WHERE created_at IS NULL OR created_at = ''"), errorMessage)) {
+        return false;
     }
 
     return true;

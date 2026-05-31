@@ -115,6 +115,20 @@ int roleRank(upkun::domain::UserRole role)
     return 0;
 }
 
+bool recipeValuesEqual(const upkun::domain::RecipeParameters& left, const upkun::domain::RecipeParameters& right)
+{
+    return left.name == right.name
+        && left.targetSpeed == right.targetSpeed
+        && left.fillVolumeMl == right.fillVolumeMl
+        && left.fillTimeMs == right.fillTimeMs
+        && left.cappingTorqueCentinewtonMeter == right.cappingTorqueCentinewtonMeter
+        && left.weightMinGram == right.weightMinGram
+        && left.weightMaxGram == right.weightMaxGram
+        && left.labelMode == right.labelMode
+        && left.batchTargetCount == right.batchTargetCount
+        && left.simulationQualityRate == right.simulationQualityRate;
+}
+
 } // namespace
 
 namespace upkun::app {
@@ -245,6 +259,16 @@ void MainWindow::refreshBatchRecords()
     updateActiveBatchView();
 }
 
+void MainWindow::refreshRecipeRecords()
+{
+    if (m_recipePage == nullptr) {
+        return;
+    }
+
+    m_recipePage->setRecipes(m_recipeRepository.listRecipes());
+    m_recipePage->setApplyRows(m_recipeRepository.recentApplyRows());
+}
+
 void MainWindow::startBatch(const QString& batchNo, int targetCount)
 {
     if (!ensureRole(upkun::domain::UserRole::Operator, QStringLiteral("开始批次"))) {
@@ -324,6 +348,47 @@ void MainWindow::endBatch()
     refreshBatchRecords();
 }
 
+void MainWindow::loadRecipe(int recipeId)
+{
+    const auto recipe = m_recipeRepository.loadById(recipeId);
+    if (!recipe.has_value()) {
+        m_alarmLabel->setText(QStringLiteral("加载配方失败：未找到 ID %1").arg(recipeId));
+        return;
+    }
+
+    m_recipePage->setRecipe(*recipe);
+    m_recipePage->setMessage(QStringLiteral("已加载配方：%1 V%2").arg(recipe->name).arg(recipe->version));
+    updateBatchContext();
+}
+
+void MainWindow::copyRecipe(upkun::domain::RecipeParameters recipe, QString newName)
+{
+    if (!ensureRole(upkun::domain::UserRole::Engineer, QStringLiteral("复制配方"))) {
+        return;
+    }
+    if (recipe.id <= 0) {
+        m_recipePage->setMessage(QStringLiteral("请先选择已保存的源配方"));
+        return;
+    }
+
+    upkun::domain::RecipeParameters copied;
+    QString errorMessage;
+    if (!m_recipeRepository.copyRecipe(recipe.id, newName, currentUserDisplayName(), &copied, &errorMessage)) {
+        m_alarmLabel->setText(QStringLiteral("复制配方失败：%1").arg(errorMessage));
+        m_recipePage->setMessage(QStringLiteral("复制失败：%1").arg(errorMessage));
+        appendOperationLog(QStringLiteral("复制配方"), recipe.name, QStringLiteral("失败"), errorMessage);
+        refreshRecipeRecords();
+        return;
+    }
+
+    m_recipePage->setRecipe(copied);
+    m_recipePage->setMessage(QStringLiteral("已复制为：%1").arg(copied.name));
+    m_alarmLabel->setText(QStringLiteral("配方已复制：%1").arg(copied.name));
+    appendOperationLog(QStringLiteral("复制配方"), copied.name, QStringLiteral("成功"), QStringLiteral("源配方：%1").arg(recipe.name));
+    refreshRecipeRecords();
+    updateBatchContext();
+}
+
 void MainWindow::saveRecipe(upkun::domain::RecipeParameters recipe)
 {
     // 配方影响工艺参数，先要求工程师及以上角色。
@@ -331,8 +396,9 @@ void MainWindow::saveRecipe(upkun::domain::RecipeParameters recipe)
         return;
     }
 
-    persistRecipe(recipe);
-    updateBatchContext();
+    if (persistRecipe(recipe).has_value()) {
+        updateBatchContext();
+    }
 }
 
 void MainWindow::applyRecipe(upkun::domain::RecipeParameters recipe)
@@ -342,13 +408,29 @@ void MainWindow::applyRecipe(upkun::domain::RecipeParameters recipe)
         return;
     }
 
-    if (!persistRecipe(recipe)) {
+    auto savedRecipe = recipe.id > 0 ? m_recipeRepository.loadById(recipe.id) : std::optional<upkun::domain::RecipeParameters> {};
+    if (!savedRecipe.has_value() || !recipeValuesEqual(recipe, *savedRecipe)) {
+        savedRecipe = persistRecipe(recipe);
+    }
+    if (!savedRecipe.has_value()) {
         return;
     }
 
-    m_deviceClient->writeRecipe(recipe);
-    m_alarmLabel->setText(QStringLiteral("配方已下发：%1").arg(recipe.name));
-    appendOperationLog(QStringLiteral("下发配方"), recipe.name, QStringLiteral("成功"), QStringLiteral("Holding Registers 40001-40010"));
+    m_deviceClient->writeRecipe(*savedRecipe);
+    const auto user = m_userSession.currentUser();
+    if (user.has_value()) {
+        QString applyError;
+        if (!m_recipeRepository.recordApply(*savedRecipe, *user, QStringLiteral("PLC/模拟器"), QStringLiteral("成功"),
+                QStringLiteral("Holding Registers 40001-40010"), &applyError)) {
+            m_recipePage->setMessage(QStringLiteral("下发成功，但记录失败：%1").arg(applyError));
+        }
+    }
+
+    m_recipePage->setRecipe(m_recipeRepository.loadById(savedRecipe->id).value_or(*savedRecipe));
+    m_alarmLabel->setText(QStringLiteral("配方已下发：%1 V%2").arg(savedRecipe->name).arg(savedRecipe->version));
+    m_recipePage->setMessage(QStringLiteral("已下发：%1 V%2").arg(savedRecipe->name).arg(savedRecipe->version));
+    appendOperationLog(QStringLiteral("下发配方"), savedRecipe->name, QStringLiteral("成功"), QStringLiteral("Holding Registers 40001-40010"));
+    refreshRecipeRecords();
     updateBatchContext();
     refreshAlarmRecords();
 }
@@ -543,6 +625,7 @@ void MainWindow::setupStorage()
     } else if (m_recipePage != nullptr) {
         m_recipePage->setRecipe(m_recipeRepository.loadDefault());
     }
+    refreshRecipeRecords();
     updateBatchContext();
     loadActiveBatch();
 
@@ -561,6 +644,12 @@ void MainWindow::setupStorage()
         this, &MainWindow::saveRecipe);
     connect(m_recipePage, &upkun::ui::RecipePage::applyRequested,
         this, &MainWindow::applyRecipe);
+    connect(m_recipePage, &upkun::ui::RecipePage::copyRequested,
+        this, &MainWindow::copyRecipe);
+    connect(m_recipePage, &upkun::ui::RecipePage::recipeSelected,
+        this, &MainWindow::loadRecipe);
+    connect(m_recipePage, &upkun::ui::RecipePage::refreshRequested,
+        this, &MainWindow::refreshRecipeRecords);
     connect(m_trendPage, &upkun::ui::TrendPage::exportRequested,
         this, &MainWindow::exportTrendCsv);
 
@@ -706,21 +795,30 @@ bool MainWindow::ensureRole(upkun::domain::UserRole minimumRole, const QString& 
     return true;
 }
 
-bool MainWindow::persistRecipe(const upkun::domain::RecipeParameters& recipe)
+std::optional<upkun::domain::RecipeParameters> MainWindow::persistRecipe(const upkun::domain::RecipeParameters& recipe)
 {
     // 保存配方被 save/apply 两个入口共用，避免下发时重复绕过错误处理。
     QString errorMessage;
-    if (!m_recipeRepository.save(recipe, &errorMessage)) {
+    if (!m_recipeRepository.save(recipe, currentUserDisplayName(), &errorMessage)) {
         m_alarmLabel->setText(QStringLiteral("保存配方失败：%1").arg(errorMessage));
+        m_recipePage->setMessage(QStringLiteral("保存失败：%1").arg(errorMessage));
         appendOperationLog(QStringLiteral("保存配方"), recipe.name, QStringLiteral("失败"), errorMessage);
         refreshAlarmRecords();
-        return false;
+        return std::nullopt;
     }
 
-    m_alarmLabel->setText(QStringLiteral("配方已保存：%1").arg(recipe.name));
-    appendOperationLog(QStringLiteral("保存配方"), recipe.name, QStringLiteral("成功"), QStringLiteral("SQLite"));
+    const auto savedRecipe = m_recipeRepository.loadByName(recipe.name);
+    if (savedRecipe.has_value()) {
+        m_recipePage->setRecipe(*savedRecipe);
+        m_recipePage->setMessage(QStringLiteral("已保存：%1 V%2").arg(savedRecipe->name).arg(savedRecipe->version));
+    }
+
+    const int version = savedRecipe.has_value() ? savedRecipe->version : recipe.version;
+    m_alarmLabel->setText(QStringLiteral("配方已保存：%1 V%2").arg(recipe.name).arg(version));
+    appendOperationLog(QStringLiteral("保存配方"), recipe.name, QStringLiteral("成功"), QStringLiteral("SQLite V%1").arg(version));
+    refreshRecipeRecords();
     refreshAlarmRecords();
-    return true;
+    return savedRecipe;
 }
 
 void MainWindow::appendOperationLog(const QString& action, const QString& target, const QString& result, const QString& message)
