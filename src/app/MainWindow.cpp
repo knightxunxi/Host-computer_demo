@@ -4,6 +4,7 @@
 #include "simulator/SimulatedModbusServer.h"
 #include "ui/dialogs/LoginDialog.h"
 #include "ui/pages/AlarmPage.h"
+#include "ui/pages/BatchPage.h"
 #include "ui/pages/MonitorPage.h"
 #include "ui/pages/RecipePage.h"
 #include "ui/pages/SimulatorPage.h"
@@ -140,11 +141,13 @@ MainWindow::MainWindow(QWidget* parent)
 
     m_pages = new QStackedWidget(body);
     m_monitorPage = new upkun::ui::MonitorPage(m_pages);
+    m_batchPage = new upkun::ui::BatchPage(m_pages);
     m_alarmPage = new upkun::ui::AlarmPage(m_pages);
     m_recipePage = new upkun::ui::RecipePage(m_pages);
     m_trendPage = new upkun::ui::TrendPage(m_pages);
     m_simulatorPage = new upkun::ui::SimulatorPage(m_pages);
     m_pages->addWidget(m_monitorPage);
+    m_pages->addWidget(m_batchPage);
     m_pages->addWidget(m_alarmPage);
     m_pages->addWidget(m_recipePage);
     m_pages->addWidget(m_trendPage);
@@ -174,6 +177,7 @@ void MainWindow::handleNavigationChanged(int row)
 
 void MainWindow::handleSnapshotUpdated(const upkun::domain::DeviceSnapshot& snapshot)
 {
+    m_latestSnapshot = snapshot;
     m_systemStateLabel->setText(QStringLiteral("系统状态：%1").arg(systemStateText(snapshot.systemState)));
     m_modeLabel->setText(QStringLiteral("当前模式：%1").arg(runModeText(snapshot.currentMode)));
     m_alarmLabel->setText(snapshot.currentAlarmCode == 0
@@ -188,6 +192,7 @@ void MainWindow::handleSnapshotUpdated(const upkun::domain::DeviceSnapshot& snap
     m_monitorPage->updateSnapshot(snapshot);
     m_trendPage->appendSnapshot(snapshot);
     m_simulatorPage->updateSnapshot(snapshot);
+    updateActiveBatchView();
 
     const QDateTime now = QDateTime::currentDateTime();
     if (!m_lastTrendSampleAt.isValid() || m_lastTrendSampleAt.msecsTo(now) >= 1000) {
@@ -230,6 +235,95 @@ void MainWindow::refreshAlarmRecords()
     m_alarmPage->setOperationRows(m_alarmService->recentOperationRows());
 }
 
+void MainWindow::refreshBatchRecords()
+{
+    if (m_batchPage == nullptr) {
+        return;
+    }
+
+    m_batchPage->setBatchRows(m_batchRepository.recentRows());
+    updateActiveBatchView();
+}
+
+void MainWindow::startBatch(const QString& batchNo, int targetCount)
+{
+    if (!ensureRole(upkun::domain::UserRole::Operator, QStringLiteral("开始批次"))) {
+        return;
+    }
+
+    const auto user = m_userSession.currentUser();
+    if (!user.has_value()) {
+        m_batchPage->setMessage(QStringLiteral("请先切换到登录用户"));
+        return;
+    }
+
+    const auto recipe = m_recipePage->currentRecipe();
+    upkun::domain::ProductionBatch batch;
+    batch.batchNo = batchNo.trimmed();
+    batch.recipeName = recipe.name;
+    batch.operatorUserId = user->id;
+    batch.operatorLoginName = user->loginName;
+    batch.operatorDisplayName = user->displayName;
+    batch.targetCount = targetCount > 0 ? targetCount : recipe.batchTargetCount;
+    batch.startTotalCount = m_latestSnapshot.counters.total;
+    batch.startGoodCount = m_latestSnapshot.counters.good;
+    batch.startBadCount = m_latestSnapshot.counters.bad;
+
+    QString errorMessage;
+    if (!m_batchRepository.startBatch(&batch, &errorMessage)) {
+        m_batchPage->setMessage(QStringLiteral("开始失败：%1").arg(errorMessage));
+        appendOperationLog(QStringLiteral("开始批次"), batch.batchNo, QStringLiteral("失败"), errorMessage);
+        refreshBatchRecords();
+        return;
+    }
+
+    m_activeBatch = batch;
+    m_deviceClient->sendCommand(upkun::domain::DeviceCommand::BatchStart);
+    m_batchPage->setMessage(QStringLiteral("批次已开始：%1").arg(batch.batchNo));
+    appendOperationLog(QStringLiteral("开始批次"), batch.batchNo, QStringLiteral("成功"),
+        QStringLiteral("计划 %1 pcs，配方 %2").arg(batch.targetCount).arg(batch.recipeName));
+    refreshBatchRecords();
+}
+
+void MainWindow::endBatch()
+{
+    if (!ensureRole(upkun::domain::UserRole::Operator, QStringLiteral("结束批次"))) {
+        return;
+    }
+    if (!m_activeBatch.has_value()) {
+        m_batchPage->setMessage(QStringLiteral("没有进行中的批次"));
+        return;
+    }
+    if (m_latestSnapshot.systemState == upkun::domain::SystemState::Running) {
+        const QString message = QStringLiteral("请先停止产线再结束批次");
+        m_batchPage->setMessage(message);
+        appendOperationLog(QStringLiteral("结束批次"), m_activeBatch->batchNo, QStringLiteral("拒绝"), message);
+        refreshBatchRecords();
+        return;
+    }
+
+    const int totalCount = activeBatchTotalCount();
+    const int goodCount = activeBatchGoodCount();
+    const int badCount = activeBatchBadCount();
+
+    QString errorMessage;
+    if (!m_batchRepository.finishActiveBatch(m_activeBatch->id, totalCount, goodCount, badCount, &errorMessage)) {
+        m_batchPage->setMessage(QStringLiteral("结束失败：%1").arg(errorMessage));
+        appendOperationLog(QStringLiteral("结束批次"), m_activeBatch->batchNo, QStringLiteral("失败"), errorMessage);
+        refreshBatchRecords();
+        return;
+    }
+
+    const QString finishedBatchNo = m_activeBatch->batchNo;
+    m_deviceClient->sendCommand(upkun::domain::DeviceCommand::BatchEnd);
+    m_activeBatch.reset();
+    m_batchPage->clearActiveBatch();
+    m_batchPage->setMessage(QStringLiteral("批次已结束：%1").arg(finishedBatchNo));
+    appendOperationLog(QStringLiteral("结束批次"), finishedBatchNo, QStringLiteral("成功"),
+        QStringLiteral("总数 %1，良品 %2，不良 %3").arg(totalCount).arg(goodCount).arg(badCount));
+    refreshBatchRecords();
+}
+
 void MainWindow::saveRecipe(upkun::domain::RecipeParameters recipe)
 {
     // 配方影响工艺参数，先要求工程师及以上角色。
@@ -238,6 +332,7 @@ void MainWindow::saveRecipe(upkun::domain::RecipeParameters recipe)
     }
 
     persistRecipe(recipe);
+    updateBatchContext();
 }
 
 void MainWindow::applyRecipe(upkun::domain::RecipeParameters recipe)
@@ -254,6 +349,7 @@ void MainWindow::applyRecipe(upkun::domain::RecipeParameters recipe)
     m_deviceClient->writeRecipe(recipe);
     m_alarmLabel->setText(QStringLiteral("配方已下发：%1").arg(recipe.name));
     appendOperationLog(QStringLiteral("下发配方"), recipe.name, QStringLiteral("成功"), QStringLiteral("Holding Registers 40001-40010"));
+    updateBatchContext();
     refreshAlarmRecords();
 }
 
@@ -331,10 +427,12 @@ void MainWindow::handleCurrentUserChanged()
     if (user.has_value()) {
         m_userLabel->setText(QStringLiteral("当前用户：%1（%2）")
                 .arg(user->displayName, upkun::domain::userRoleText(user->role)));
+        updateBatchContext();
         return;
     }
 
     m_userLabel->setText(QStringLiteral("当前用户：未登录"));
+    updateBatchContext();
 }
 
 QWidget* MainWindow::createStatusHeader()
@@ -388,6 +486,7 @@ QWidget* MainWindow::createNavigation()
 
     m_navigation = new QListWidget(frame);
     m_navigation->addItem(new QListWidgetItem(QStringLiteral("主监控")));
+    m_navigation->addItem(new QListWidgetItem(QStringLiteral("批次管理")));
     m_navigation->addItem(new QListWidgetItem(QStringLiteral("报警记录")));
     m_navigation->addItem(new QListWidgetItem(QStringLiteral("参数/配方")));
     m_navigation->addItem(new QListWidgetItem(QStringLiteral("趋势曲线")));
@@ -444,12 +543,20 @@ void MainWindow::setupStorage()
     } else if (m_recipePage != nullptr) {
         m_recipePage->setRecipe(m_recipeRepository.loadDefault());
     }
+    updateBatchContext();
+    loadActiveBatch();
 
     m_alarmService = new upkun::services::AlarmService(&m_alarmRepository, &m_operationLogRepository, this);
     connect(m_alarmService, &upkun::services::AlarmService::recordsChanged,
         this, &MainWindow::refreshAlarmRecords);
     connect(m_alarmPage, &upkun::ui::AlarmPage::refreshRequested,
         this, &MainWindow::refreshAlarmRecords);
+    connect(m_batchPage, &upkun::ui::BatchPage::startBatchRequested,
+        this, &MainWindow::startBatch);
+    connect(m_batchPage, &upkun::ui::BatchPage::endBatchRequested,
+        this, &MainWindow::endBatch);
+    connect(m_batchPage, &upkun::ui::BatchPage::refreshRequested,
+        this, &MainWindow::refreshBatchRecords);
     connect(m_recipePage, &upkun::ui::RecipePage::saveRequested,
         this, &MainWindow::saveRecipe);
     connect(m_recipePage, &upkun::ui::RecipePage::applyRequested,
@@ -459,6 +566,7 @@ void MainWindow::setupStorage()
 
     appendOperationLog(QStringLiteral("启动程序"), QStringLiteral("数据库"), QStringLiteral("成功"), QStringLiteral("data/app.sqlite3"));
     refreshAlarmRecords();
+    refreshBatchRecords();
 }
 
 void MainWindow::setupDeviceLink()
@@ -512,6 +620,60 @@ void MainWindow::loginDefaultOperator()
     QString errorMessage;
     m_userRepository.updateLastLogin(user->id, &errorMessage);
     m_userSession.setCurrentUser(*user);
+}
+
+void MainWindow::updateBatchContext()
+{
+    if (m_batchPage == nullptr || m_recipePage == nullptr) {
+        return;
+    }
+
+    const auto recipe = m_recipePage->currentRecipe();
+    m_batchPage->setCurrentContext(recipe.name, currentUserDisplayName(), recipe.batchTargetCount);
+}
+
+void MainWindow::updateActiveBatchView()
+{
+    if (m_batchPage == nullptr) {
+        return;
+    }
+
+    if (m_activeBatch.has_value()) {
+        m_batchPage->setActiveBatch(*m_activeBatch, m_latestSnapshot);
+        return;
+    }
+
+    m_batchPage->clearActiveBatch();
+}
+
+void MainWindow::loadActiveBatch()
+{
+    m_activeBatch = m_batchRepository.activeBatch();
+    updateActiveBatchView();
+}
+
+int MainWindow::activeBatchTotalCount() const
+{
+    if (!m_activeBatch.has_value()) {
+        return 0;
+    }
+    return qMax(0, m_latestSnapshot.counters.batch);
+}
+
+int MainWindow::activeBatchGoodCount() const
+{
+    if (!m_activeBatch.has_value()) {
+        return 0;
+    }
+    return qMax(0, m_latestSnapshot.counters.good - m_activeBatch->startGoodCount);
+}
+
+int MainWindow::activeBatchBadCount() const
+{
+    if (!m_activeBatch.has_value()) {
+        return 0;
+    }
+    return qMax(0, m_latestSnapshot.counters.bad - m_activeBatch->startBadCount);
 }
 
 QString MainWindow::currentUserDisplayName() const

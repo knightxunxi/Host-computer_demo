@@ -196,6 +196,8 @@ void LineSimulator::handleCommand(int offset)
         m_inputRegisters[upkun::device::modbus::toInputRegisterOffset(upkun::device::modbus::InputRegisters::CurrentMode)] = static_cast<quint16>(upkun::domain::RunMode::Manual);
     } else if (offset == toCoilOffset(Coils::CmdBatchStart)) {
         m_batchCount = 0;
+    } else if (offset == toCoilOffset(Coils::CmdBatchEnd)) {
+        m_batchCount = 0;
     } else if (offset == toCoilOffset(Coils::CmdSimFault)) {
         triggerAlarm(5001);
     }

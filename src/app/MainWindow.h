@@ -1,10 +1,12 @@
 #pragma once
 
+#include "domain/Batch.h"
 #include "domain/DeviceTypes.h"
 #include "domain/User.h"
 #include "services/AlarmService.h"
 #include "services/UserSessionService.h"
 #include "storage/AlarmRepository.h"
+#include "storage/BatchRepository.h"
 #include "storage/DatabaseManager.h"
 #include "storage/OperationLogRepository.h"
 #include "storage/RecipeRepository.h"
@@ -17,6 +19,7 @@
 #include <QMainWindow>
 #include <QPushButton>
 #include <QStackedWidget>
+#include <optional>
 
 namespace upkun::device {
 class ModbusTcpClient;
@@ -28,6 +31,7 @@ class SimulatedModbusServer;
 
 namespace upkun::ui {
 class AlarmPage;
+class BatchPage;
 class MonitorPage;
 class RecipePage;
 class SimulatorPage;
@@ -48,6 +52,9 @@ private slots:
     void handleConnectionChanged(upkun::domain::ConnectionState state);
     void handleCommandFinished(upkun::domain::DeviceCommand command, bool ok, const QString& message);
     void refreshAlarmRecords();
+    void refreshBatchRecords();
+    void startBatch(const QString& batchNo, int targetCount);
+    void endBatch();
     void saveRecipe(upkun::domain::RecipeParameters recipe);
     void applyRecipe(upkun::domain::RecipeParameters recipe);
     void exportTrendCsv();
@@ -64,6 +71,12 @@ private:
     void setupStorage();
     void setupDeviceLink();
     void loginDefaultOperator();
+    void updateBatchContext();
+    void updateActiveBatchView();
+    void loadActiveBatch();
+    int activeBatchTotalCount() const;
+    int activeBatchGoodCount() const;
+    int activeBatchBadCount() const;
     QString currentUserDisplayName() const;
     bool ensureRole(upkun::domain::UserRole minimumRole, const QString& action);
     bool persistRecipe(const upkun::domain::RecipeParameters& recipe);
@@ -78,6 +91,7 @@ private:
     QListWidget* m_navigation = nullptr;
     QStackedWidget* m_pages = nullptr;
     upkun::ui::MonitorPage* m_monitorPage = nullptr;
+    upkun::ui::BatchPage* m_batchPage = nullptr;
     upkun::ui::AlarmPage* m_alarmPage = nullptr;
     upkun::ui::RecipePage* m_recipePage = nullptr;
     upkun::ui::TrendPage* m_trendPage = nullptr;
@@ -86,6 +100,7 @@ private:
     upkun::device::ModbusTcpClient* m_deviceClient = nullptr;
     upkun::storage::DatabaseManager m_databaseManager;
     upkun::storage::AlarmRepository m_alarmRepository;
+    upkun::storage::BatchRepository m_batchRepository;
     upkun::storage::OperationLogRepository m_operationLogRepository;
     upkun::storage::UserRepository m_userRepository;
     upkun::storage::RecipeRepository m_recipeRepository;
@@ -93,6 +108,8 @@ private:
     upkun::services::UserSessionService m_userSession;
     upkun::services::AlarmService* m_alarmService = nullptr;
     QDateTime m_lastTrendSampleAt;
+    upkun::domain::DeviceSnapshot m_latestSnapshot;
+    std::optional<upkun::domain::ProductionBatch> m_activeBatch;
 };
 
 } // namespace upkun::app

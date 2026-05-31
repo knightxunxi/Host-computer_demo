@@ -114,6 +114,30 @@ bool DatabaseManager::initializeSchema(QString* errorMessage)
             )
         )SQL"),
         QStringLiteral(R"SQL(
+            CREATE TABLE IF NOT EXISTS batches (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                batch_no TEXT NOT NULL UNIQUE,
+                recipe_name TEXT NOT NULL,
+                operator_user_id INTEGER,
+                operator_login_name TEXT NOT NULL,
+                operator_display_name TEXT NOT NULL,
+                target_count INTEGER NOT NULL,
+                start_total_count INTEGER NOT NULL,
+                start_good_count INTEGER NOT NULL,
+                start_bad_count INTEGER NOT NULL,
+                total_count INTEGER NOT NULL DEFAULT 0,
+                good_count INTEGER NOT NULL DEFAULT 0,
+                bad_count INTEGER NOT NULL DEFAULT 0,
+                status TEXT NOT NULL,
+                started_at TEXT NOT NULL,
+                ended_at TEXT
+            )
+        )SQL"),
+        QStringLiteral(R"SQL(
+            CREATE INDEX IF NOT EXISTS idx_batches_status_started_at
+            ON batches(status, started_at)
+        )SQL"),
+        QStringLiteral(R"SQL(
             CREATE TABLE IF NOT EXISTS trend_samples (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 sample_time TEXT NOT NULL,
