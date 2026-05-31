@@ -4,6 +4,7 @@
 
 namespace {
 
+// Modbus TCP 使用大端序，Qt 的 QByteArray 按字节保存，这里集中处理 16 位值。
 quint16 readU16(const QByteArray& data, int offset)
 {
     const auto high = static_cast<quint8>(data.at(offset));
@@ -71,6 +72,7 @@ void ModbusTcpClient::sendCommand(upkun::domain::DeviceCommand command)
         return;
     }
 
+    // 业务层只认识“启动/停止”等命令；通信层负责把命令翻译成具体线圈地址。
     using modbus::Coils;
     using modbus::toCoilOffset;
 
@@ -113,6 +115,7 @@ void ModbusTcpClient::sendCommand(upkun::domain::DeviceCommand command)
 
 void ModbusTcpClient::writeRecipe(const upkun::domain::RecipeParameters& recipe)
 {
+    // 当前配方连续写入 40001-40010，后续多配方版本仍可复用这条下发通道。
     QVector<quint16> values {
         static_cast<quint16>(recipe.targetSpeed),
         static_cast<quint16>(recipe.fillVolumeMl),
@@ -134,6 +137,7 @@ void ModbusTcpClient::poll()
         return;
     }
 
+    // 每轮先读传感器布尔量，再读寄存器状态；寄存器读完后发布完整快照。
     sendReadRequest(0x02, 0, 82, RequestKind::ReadDiscreteInputs);
     sendReadRequest(0x04, 0, 25, RequestKind::ReadInputRegisters);
 }
@@ -167,6 +171,7 @@ void ModbusTcpClient::handleReadyRead()
     m_buffer.append(m_socket.readAll());
 
     while (m_buffer.size() >= 7) {
+        // TCP 是流式协议，可能半包或粘包；按 MBAP 头的 length 字段切出完整 ADU。
         const quint16 length = readU16(m_buffer, 4);
         const int aduSize = 6 + length;
         if (m_buffer.size() < aduSize) {
@@ -227,6 +232,7 @@ void ModbusTcpClient::sendAdu(quint8 function, const QByteArray& payload, Pendin
     adu.append(static_cast<char>(function));
     adu.append(payload);
 
+    // transactionId 用来把异步响应匹配回当初的读写请求。
     m_pending.insert(transactionId, request);
     m_socket.write(adu);
 }
@@ -287,6 +293,7 @@ void ModbusTcpClient::decodeInputRegisters(const QByteArray& pdu)
     }
 
     const QByteArray registers = pdu.mid(2);
+    // PDU 中寄存器是连续数组，点位表中的地址先转换为数组偏移再读取。
     auto reg = [&registers](int offset) -> quint16 {
         const int byteOffset = offset * 2;
         return byteOffset + 1 < registers.size() ? readU16(registers, byteOffset) : 0;

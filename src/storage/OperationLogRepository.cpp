@@ -17,6 +17,7 @@ bool appendRow(const QVariant& userId,
     const QString& message,
     QString* errorMessage)
 {
+    // 操作日志保留用户快照字段，避免用户显示名或角色后续修改影响历史追溯。
     QSqlQuery query;
     query.prepare(QStringLiteral(
         "INSERT INTO operation_logs(user_id, login_name, display_name, role, action, target, result, message, created_at) "
@@ -46,6 +47,7 @@ namespace upkun::storage {
 
 bool OperationLogRepository::append(const QString& action, const QString& target, const QString& result, const QString& message, QString* errorMessage)
 {
+    // 自动报警、启动初始化等没有明确操作人的事件，统一归为系统日志。
     return appendRow(0,
         QStringLiteral("system"),
         QStringLiteral("系统"),
@@ -59,6 +61,7 @@ bool OperationLogRepository::append(const QString& action, const QString& target
 
 bool OperationLogRepository::append(const upkun::domain::User& user, const QString& action, const QString& target, const QString& result, const QString& message, QString* errorMessage)
 {
+    // 有登录用户时记录真实用户，报警页可直接展示中文显示名和角色。
     return appendRow(user.id,
         user.loginName.isEmpty() ? QStringLiteral("unknown") : user.loginName,
         user.displayName.isEmpty() ? QStringLiteral("未命名用户") : user.displayName,

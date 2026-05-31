@@ -10,6 +10,7 @@ namespace {
 
 upkun::domain::User userFromQuery(const QSqlQuery& query)
 {
+    // 仓储层负责把数据库行转换为领域模型，避免 UI 层直接依赖字段顺序。
     upkun::domain::User user;
     user.id = query.value(0).toInt();
     user.loginName = query.value(1).toString();
@@ -30,6 +31,7 @@ namespace upkun::storage {
 
 bool UserRepository::ensureDefaultUsers(QString* errorMessage)
 {
+    // 默认用户是学习阶段的种子数据；方法保持幂等，重复启动不会重复插入。
     struct DefaultUser {
         QString loginName;
         QString displayName;
@@ -131,6 +133,7 @@ std::optional<upkun::domain::User> UserRepository::authenticate(const QString& l
         return std::nullopt;
     }
 
+    // 认证只返回领域用户，不把 password_hash 暴露给上层。
     const QString storedHash = query.value(6).toString();
     if (storedHash != hashPassword(normalizedLoginName, password)) {
         if (errorMessage != nullptr) {
@@ -165,6 +168,7 @@ bool UserRepository::updateLastLogin(int userId, QString* errorMessage)
 
 QString UserRepository::hashPassword(const QString& loginName, const QString& password)
 {
+    // 学习版用登录名参与哈希，避免明文保存；真实项目应升级为随机盐和密码策略。
     const QByteArray material = QStringLiteral("%1:%2").arg(loginName.trimmed(), password).toUtf8();
     return QString::fromLatin1(QCryptographicHash::hash(material, QCryptographicHash::Sha256).toHex());
 }

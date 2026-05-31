@@ -41,6 +41,8 @@ bool DatabaseManager::initializeSchema(QString* errorMessage)
 {
     QSqlQuery query;
 
+    // 学习项目先采用轻量迁移方式：启动时逐条 CREATE IF NOT EXISTS。
+    // 真实项目进入多版本交付后，应改成带版本号的数据库迁移脚本。
     const QStringList statements {
         QStringLiteral(R"SQL(
             CREATE TABLE IF NOT EXISTS alarms (

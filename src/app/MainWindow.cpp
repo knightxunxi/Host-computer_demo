@@ -102,6 +102,7 @@ QString commandText(upkun::domain::DeviceCommand command)
 
 int roleRank(upkun::domain::UserRole role)
 {
+    // 简化版权限模型：角色等级越高，可执行的操作越多。
     switch (role) {
     case upkun::domain::UserRole::Operator:
         return 1;
@@ -179,6 +180,7 @@ void MainWindow::handleSnapshotUpdated(const upkun::domain::DeviceSnapshot& snap
             ? QStringLiteral("当前报警：无")
             : QStringLiteral("当前报警：%1").arg(snapshot.currentAlarmCode));
 
+    // 每次通信快照都会同步驱动报警、监控、趋势和模拟器界面。
     if (m_alarmService != nullptr) {
         m_alarmService->processSnapshot(snapshot);
     }
@@ -189,6 +191,7 @@ void MainWindow::handleSnapshotUpdated(const upkun::domain::DeviceSnapshot& snap
 
     const QDateTime now = QDateTime::currentDateTime();
     if (!m_lastTrendSampleAt.isValid() || m_lastTrendSampleAt.msecsTo(now) >= 1000) {
+        // 趋势入库按 1 秒节流，避免 UI 高频刷新时把 SQLite 写爆。
         m_trendRepository.appendSample(snapshot);
         m_lastTrendSampleAt = now;
     }
@@ -206,6 +209,7 @@ void MainWindow::handleCommandFinished(upkun::domain::DeviceCommand command, boo
     appendOperationLog(commandText(command), QStringLiteral("PLC/模拟器"), ok ? QStringLiteral("成功") : QStringLiteral("失败"), message);
 
     if (ok && command == upkun::domain::DeviceCommand::AlarmAck && m_alarmService != nullptr) {
+        // 报警表的确认人和操作日志都尽量使用当前登录用户，便于追溯。
         const auto user = m_userSession.currentUser();
         if (user.has_value()) {
             m_alarmService->acknowledgeCurrentAlarm(*user);
@@ -228,6 +232,7 @@ void MainWindow::refreshAlarmRecords()
 
 void MainWindow::saveRecipe(upkun::domain::RecipeParameters recipe)
 {
+    // 配方影响工艺参数，先要求工程师及以上角色。
     if (!ensureRole(upkun::domain::UserRole::Engineer, QStringLiteral("保存配方"))) {
         return;
     }
@@ -237,6 +242,7 @@ void MainWindow::saveRecipe(upkun::domain::RecipeParameters recipe)
 
 void MainWindow::applyRecipe(upkun::domain::RecipeParameters recipe)
 {
+    // 下发前先保存，保证“界面值、数据库值、PLC 值”三者尽量一致。
     if (!ensureRole(upkun::domain::UserRole::Engineer, QStringLiteral("下发配方"))) {
         return;
     }
@@ -295,6 +301,7 @@ void MainWindow::stopSimulator()
 
 void MainWindow::switchUser()
 {
+    // 快速切换面向现场共用工控机：不退出程序，只切换当前操作身份。
     const auto users = m_userRepository.enabledUsers();
     upkun::ui::LoginDialog dialog(users, this);
     if (dialog.exec() != QDialog::Accepted) {
@@ -456,6 +463,7 @@ void MainWindow::setupStorage()
 
 void MainWindow::setupDeviceLink()
 {
+    // 第一阶段默认启动内置模拟器；M14 拆分后这里会变成连接外部模拟器或真实 PLC。
     m_simulatedServer = new upkun::simulator::SimulatedModbusServer(this);
     m_deviceClient = new upkun::device::ModbusTcpClient(this);
 
@@ -494,6 +502,7 @@ void MainWindow::setupDeviceLink()
 
 void MainWindow::loginDefaultOperator()
 {
+    // 自动登录避免无界面烟测被登录弹窗阻塞；真实交付版应改成强制登录。
     auto user = m_userRepository.findEnabledByLoginName(QStringLiteral("op001"));
     if (!user.has_value()) {
         m_userSession.clear();
@@ -513,6 +522,7 @@ QString MainWindow::currentUserDisplayName() const
 
 bool MainWindow::ensureRole(upkun::domain::UserRole minimumRole, const QString& action)
 {
+    // 权限失败也写操作日志，方便之后分析“谁尝试做了什么”。
     const auto user = m_userSession.currentUser();
     if (!user.has_value()) {
         const QString message = QStringLiteral("请先切换到有权限的用户");
@@ -536,6 +546,7 @@ bool MainWindow::ensureRole(upkun::domain::UserRole minimumRole, const QString& 
 
 bool MainWindow::persistRecipe(const upkun::domain::RecipeParameters& recipe)
 {
+    // 保存配方被 save/apply 两个入口共用，避免下发时重复绕过错误处理。
     QString errorMessage;
     if (!m_recipeRepository.save(recipe, &errorMessage)) {
         m_alarmLabel->setText(QStringLiteral("保存配方失败：%1").arg(errorMessage));
@@ -552,6 +563,7 @@ bool MainWindow::persistRecipe(const upkun::domain::RecipeParameters& recipe)
 
 void MainWindow::appendOperationLog(const QString& action, const QString& target, const QString& result, const QString& message)
 {
+    // 所有界面操作统一走这里，减少遗漏当前用户审计的机会。
     const auto user = m_userSession.currentUser();
     if (user.has_value()) {
         m_operationLogRepository.append(*user, action, target, result, message);

@@ -58,6 +58,7 @@ bool LineSimulator::writeCoil(int offset, bool value)
 
     m_coils[offset] = value;
     if (value) {
+        // 上位机写线圈在本项目中表示“按钮脉冲”，模拟器处理后立即清零。
         handleCommand(offset);
         m_coils[offset] = false;
     }
@@ -124,9 +125,11 @@ void LineSimulator::advanceCycle()
         return;
     }
 
+    // 学习版用每秒切换一个工位来模拟全自动包装线的节拍。
     m_activeStation = m_activeStation % 8 + 1;
 
     if (m_activeStation == static_cast<int>(upkun::domain::Station::Outfeeding)) {
+        // 产品到达下料工位时才计一次产量；质量率来自配方中的模拟参数。
         const int qualityRate = clampPercent(holdingValue(
             upkun::device::modbus::toHoldingRegisterOffset(upkun::device::modbus::HoldingRegisters::SimQualityRate),
             98));
@@ -152,6 +155,7 @@ void LineSimulator::resetData()
     std::fill(m_holdingRegisters.begin(), m_holdingRegisters.end(), 0);
     std::fill(m_inputRegisters.begin(), m_inputRegisters.end(), 0);
 
+    // 默认保持寄存器相当于 PLC 里的初始工艺参数，配方下发会覆盖这些值。
     m_holdingRegisters[upkun::device::modbus::toHoldingRegisterOffset(upkun::device::modbus::HoldingRegisters::TargetSpeed)] = 60;
     m_holdingRegisters[upkun::device::modbus::toHoldingRegisterOffset(upkun::device::modbus::HoldingRegisters::FillVolume)] = 500;
     m_holdingRegisters[upkun::device::modbus::toHoldingRegisterOffset(upkun::device::modbus::HoldingRegisters::FillTime)] = 1000;
@@ -203,12 +207,14 @@ void LineSimulator::updateInputs()
     using upkun::device::modbus::toDiscreteInputOffset;
 
     std::fill(m_discreteInputs.begin(), m_discreteInputs.end(), false);
+    // 公共安全联锁默认正常；报警注入主要通过具体工位传感器改变状态。
     m_discreteInputs[toDiscreteInputOffset(DiscreteInputs::EstopOk)] = true;
     m_discreteInputs[toDiscreteInputOffset(DiscreteInputs::SafetyDoorOk)] = true;
     m_discreteInputs[toDiscreteInputOffset(DiscreteInputs::AirPressureOk)] = true;
     m_discreteInputs[toDiscreteInputOffset(DiscreteInputs::PowerOk)] = true;
     m_discreteInputs[toDiscreteInputOffset(DiscreteInputs::PlcReady)] = true;
 
+    // 以下偏移暂按点位表初版直接映射，后续 M13 会继续命名化和细化传感器。
     m_discreteInputs[10] = true;
     m_discreteInputs[20] = m_running;
     m_discreteInputs[21] = m_activeStation == 3;
@@ -237,6 +243,7 @@ void LineSimulator::updateInputRegisters()
     using upkun::device::modbus::InputRegisters;
     using upkun::device::modbus::toInputRegisterOffset;
 
+    // 输入寄存器是上位机主监控页的数据来源，集中反映当前模拟产线快照。
     const auto systemState = m_alarmCode != 0
         ? upkun::domain::SystemState::Alarm
         : (m_running ? upkun::domain::SystemState::Running : upkun::domain::SystemState::Standby);
