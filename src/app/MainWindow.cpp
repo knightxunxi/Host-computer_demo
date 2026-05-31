@@ -4,7 +4,9 @@
 #include "simulator/SimulatedModbusServer.h"
 #include "ui/pages/AlarmPage.h"
 #include "ui/pages/MonitorPage.h"
+#include "ui/pages/RecipePage.h"
 #include "ui/pages/SimulatorPage.h"
+#include "ui/pages/TrendPage.h"
 
 #include <QFrame>
 #include <QHostAddress>
@@ -122,9 +124,13 @@ MainWindow::MainWindow(QWidget* parent)
     m_pages = new QStackedWidget(body);
     m_monitorPage = new upkun::ui::MonitorPage(m_pages);
     m_alarmPage = new upkun::ui::AlarmPage(m_pages);
+    m_recipePage = new upkun::ui::RecipePage(m_pages);
+    m_trendPage = new upkun::ui::TrendPage(m_pages);
     m_simulatorPage = new upkun::ui::SimulatorPage(m_pages);
     m_pages->addWidget(m_monitorPage);
     m_pages->addWidget(m_alarmPage);
+    m_pages->addWidget(m_recipePage);
+    m_pages->addWidget(m_trendPage);
     m_pages->addWidget(m_simulatorPage);
     bodyLayout->addWidget(m_pages, 1);
 
@@ -160,7 +166,14 @@ void MainWindow::handleSnapshotUpdated(const upkun::domain::DeviceSnapshot& snap
     }
 
     m_monitorPage->updateSnapshot(snapshot);
+    m_trendPage->appendSnapshot(snapshot);
     m_simulatorPage->updateSnapshot(snapshot);
+
+    const QDateTime now = QDateTime::currentDateTime();
+    if (!m_lastTrendSampleAt.isValid() || m_lastTrendSampleAt.msecsTo(now) >= 1000) {
+        m_trendRepository.appendSample(snapshot);
+        m_lastTrendSampleAt = now;
+    }
 }
 
 void MainWindow::handleConnectionChanged(upkun::domain::ConnectionState state)
@@ -188,6 +201,46 @@ void MainWindow::refreshAlarmRecords()
 
     m_alarmPage->setAlarmRows(m_alarmService->recentAlarmRows());
     m_alarmPage->setOperationRows(m_alarmService->recentOperationRows());
+}
+
+void MainWindow::saveRecipe(upkun::domain::RecipeParameters recipe)
+{
+    QString errorMessage;
+    if (!m_recipeRepository.save(recipe, &errorMessage)) {
+        m_alarmLabel->setText(QStringLiteral("保存配方失败：%1").arg(errorMessage));
+        appendOperationLog(QStringLiteral("保存配方"), recipe.name, QStringLiteral("失败"), errorMessage);
+        refreshAlarmRecords();
+        return;
+    }
+
+    m_alarmLabel->setText(QStringLiteral("配方已保存：%1").arg(recipe.name));
+    appendOperationLog(QStringLiteral("保存配方"), recipe.name, QStringLiteral("成功"), QStringLiteral("SQLite"));
+    refreshAlarmRecords();
+}
+
+void MainWindow::applyRecipe(upkun::domain::RecipeParameters recipe)
+{
+    saveRecipe(recipe);
+    m_deviceClient->writeRecipe(recipe);
+    m_alarmLabel->setText(QStringLiteral("配方已下发：%1").arg(recipe.name));
+    appendOperationLog(QStringLiteral("下发配方"), recipe.name, QStringLiteral("成功"), QStringLiteral("Holding Registers 40001-40010"));
+    refreshAlarmRecords();
+}
+
+void MainWindow::exportTrendCsv()
+{
+    QString errorMessage;
+    const QString filePath = QStringLiteral("data/trend-export.csv");
+    if (!m_trendRepository.exportCsv(filePath, &errorMessage)) {
+        m_trendPage->setExportMessage(QStringLiteral("失败：%1").arg(errorMessage));
+        appendOperationLog(QStringLiteral("导出趋势"), filePath, QStringLiteral("失败"), errorMessage);
+        refreshAlarmRecords();
+        return;
+    }
+
+    m_trendPage->setExportMessage(QStringLiteral("已导出 %1").arg(filePath));
+    appendOperationLog(QStringLiteral("导出趋势"), filePath, QStringLiteral("成功"), QStringLiteral("CSV"));
+    refreshAlarmRecords();
 }
 
 void MainWindow::startSimulator()
@@ -261,6 +314,8 @@ QWidget* MainWindow::createNavigation()
     m_navigation = new QListWidget(frame);
     m_navigation->addItem(new QListWidgetItem(QStringLiteral("主监控")));
     m_navigation->addItem(new QListWidgetItem(QStringLiteral("报警记录")));
+    m_navigation->addItem(new QListWidgetItem(QStringLiteral("参数/配方")));
+    m_navigation->addItem(new QListWidgetItem(QStringLiteral("趋势曲线")));
     m_navigation->addItem(new QListWidgetItem(QStringLiteral("模拟器")));
     layout->addWidget(m_navigation);
 
@@ -301,11 +356,24 @@ void MainWindow::setupStorage()
         return;
     }
 
+    QString recipeError;
+    if (!m_recipeRepository.ensureDefaultRecipe(&recipeError)) {
+        m_alarmLabel->setText(QStringLiteral("默认配方初始化失败：%1").arg(recipeError));
+    } else if (m_recipePage != nullptr) {
+        m_recipePage->setRecipe(m_recipeRepository.loadDefault());
+    }
+
     m_alarmService = new upkun::services::AlarmService(&m_alarmRepository, &m_operationLogRepository, this);
     connect(m_alarmService, &upkun::services::AlarmService::recordsChanged,
         this, &MainWindow::refreshAlarmRecords);
     connect(m_alarmPage, &upkun::ui::AlarmPage::refreshRequested,
         this, &MainWindow::refreshAlarmRecords);
+    connect(m_recipePage, &upkun::ui::RecipePage::saveRequested,
+        this, &MainWindow::saveRecipe);
+    connect(m_recipePage, &upkun::ui::RecipePage::applyRequested,
+        this, &MainWindow::applyRecipe);
+    connect(m_trendPage, &upkun::ui::TrendPage::exportRequested,
+        this, &MainWindow::exportTrendCsv);
 
     appendOperationLog(QStringLiteral("启动程序"), QStringLiteral("数据库"), QStringLiteral("成功"), QStringLiteral("data/app.sqlite3"));
     refreshAlarmRecords();

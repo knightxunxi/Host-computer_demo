@@ -78,6 +78,38 @@ bool DatabaseManager::initializeSchema(QString* errorMessage)
         QStringLiteral(R"SQL(
             CREATE INDEX IF NOT EXISTS idx_operation_logs_created_at
             ON operation_logs(created_at)
+        )SQL"),
+        QStringLiteral(R"SQL(
+            CREATE TABLE IF NOT EXISTS recipes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                target_speed INTEGER NOT NULL,
+                fill_volume INTEGER NOT NULL,
+                fill_time INTEGER NOT NULL,
+                capping_torque INTEGER NOT NULL,
+                weight_min INTEGER NOT NULL,
+                weight_max INTEGER NOT NULL,
+                label_mode INTEGER NOT NULL,
+                batch_target_count INTEGER NOT NULL,
+                simulation_quality_rate INTEGER NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+        )SQL"),
+        QStringLiteral(R"SQL(
+            CREATE TABLE IF NOT EXISTS trend_samples (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                sample_time TEXT NOT NULL,
+                speed INTEGER NOT NULL,
+                fill_volume INTEGER NOT NULL,
+                weight INTEGER NOT NULL,
+                torque INTEGER NOT NULL,
+                temperature INTEGER NOT NULL,
+                pressure INTEGER NOT NULL
+            )
+        )SQL"),
+        QStringLiteral(R"SQL(
+            CREATE INDEX IF NOT EXISTS idx_trend_samples_time
+            ON trend_samples(sample_time)
         )SQL")
     };
 

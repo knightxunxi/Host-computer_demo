@@ -33,6 +33,7 @@
 - [总体设计](docs/05-overall-design.md)
 - [Modbus TCP 模拟链路说明](docs/06-modbus-simulation.md)
 - [报警与操作日志模块说明](docs/07-alarm-and-operation-log.md)
+- [配方、趋势曲线与 CSV 导出说明](docs/08-recipe-trend-export.md)
 
 ## 当前实现能力
 
@@ -43,6 +44,8 @@
 - 模拟器页可触发缺瓶、缺盖、缺标签报警并清除故障。
 - 报警记录页可查看最近报警和最近操作日志。
 - SQLite 自动创建 `data/app.sqlite3`，用于保存报警和操作日志。
+- 参数/配方页可保存默认配方并下发到模拟 PLC。
+- 趋势曲线页可显示速度、灌装量、重量，并导出 `data/trend-export.csv`。
 
 ## 构建运行
 

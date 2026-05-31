@@ -5,7 +5,10 @@
 #include "storage/AlarmRepository.h"
 #include "storage/DatabaseManager.h"
 #include "storage/OperationLogRepository.h"
+#include "storage/RecipeRepository.h"
+#include "storage/TrendRepository.h"
 
+#include <QDateTime>
 #include <QLabel>
 #include <QListWidget>
 #include <QMainWindow>
@@ -22,7 +25,9 @@ class SimulatedModbusServer;
 namespace upkun::ui {
 class AlarmPage;
 class MonitorPage;
+class RecipePage;
 class SimulatorPage;
+class TrendPage;
 }
 
 namespace upkun::app {
@@ -39,6 +44,9 @@ private slots:
     void handleConnectionChanged(upkun::domain::ConnectionState state);
     void handleCommandFinished(upkun::domain::DeviceCommand command, bool ok, const QString& message);
     void refreshAlarmRecords();
+    void saveRecipe(upkun::domain::RecipeParameters recipe);
+    void applyRecipe(upkun::domain::RecipeParameters recipe);
+    void exportTrendCsv();
     void startSimulator();
     void stopSimulator();
 
@@ -60,13 +68,18 @@ private:
     QStackedWidget* m_pages = nullptr;
     upkun::ui::MonitorPage* m_monitorPage = nullptr;
     upkun::ui::AlarmPage* m_alarmPage = nullptr;
+    upkun::ui::RecipePage* m_recipePage = nullptr;
+    upkun::ui::TrendPage* m_trendPage = nullptr;
     upkun::ui::SimulatorPage* m_simulatorPage = nullptr;
     upkun::simulator::SimulatedModbusServer* m_simulatedServer = nullptr;
     upkun::device::ModbusTcpClient* m_deviceClient = nullptr;
     upkun::storage::DatabaseManager m_databaseManager;
     upkun::storage::AlarmRepository m_alarmRepository;
     upkun::storage::OperationLogRepository m_operationLogRepository;
+    upkun::storage::RecipeRepository m_recipeRepository;
+    upkun::storage::TrendRepository m_trendRepository;
     upkun::services::AlarmService* m_alarmService = nullptr;
+    QDateTime m_lastTrendSampleAt;
 };
 
 } // namespace upkun::app

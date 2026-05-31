@@ -1,5 +1,6 @@
 #include "app/MainWindow.h"
 #include "domain/DeviceTypes.h"
+#include "domain/Recipe.h"
 
 #include <QApplication>
 #include <QCoreApplication>
@@ -17,6 +18,7 @@ int main(int argc, char* argv[])
     qRegisterMetaType<upkun::domain::DeviceSnapshot>("upkun::domain::DeviceSnapshot");
     qRegisterMetaType<upkun::domain::ConnectionState>("upkun::domain::ConnectionState");
     qRegisterMetaType<upkun::domain::DeviceError>("upkun::domain::DeviceError");
+    qRegisterMetaType<upkun::domain::RecipeParameters>("upkun::domain::RecipeParameters");
 
     upkun::app::MainWindow window;
     window.show();
