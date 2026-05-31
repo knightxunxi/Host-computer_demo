@@ -35,6 +35,7 @@
 - [报警与操作日志模块说明](docs/07-alarm-and-operation-log.md)
 - [配方、趋势曲线与 CSV 导出说明](docs/08-recipe-trend-export.md)
 - [测试与部署说明](docs/09-test-and-deployment.md)
+- [M8 测试报告](docs/10-test-report.md)
 
 ## 当前实现能力
 

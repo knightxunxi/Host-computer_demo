@@ -7,6 +7,7 @@ $env:Path = "$QtRoot\bin;$QtTools\bin;$env:Path"
 
 $BuildDir = Join-Path $Root 'build-release'
 $DistDir = Join-Path $Root 'dist\upkun-hmi'
+$ZipPath = Join-Path $Root 'dist\upkun-hmi.zip'
 $ExePath = Join-Path $DistDir 'upkun-hmi.exe'
 
 Push-Location $Root
@@ -25,7 +26,13 @@ try {
 
     & "$QtRoot\bin\windeployqt.exe" $ExePath --release --compiler-runtime
 
+    if (Test-Path $ZipPath) {
+        Remove-Item -LiteralPath $ZipPath -Force
+    }
+    Compress-Archive -Path (Join-Path $DistDir '*') -DestinationPath $ZipPath -Force
+
     Write-Host "Package created: $DistDir"
+    Write-Host "Zip created: $ZipPath"
 } finally {
     Pop-Location
 }
