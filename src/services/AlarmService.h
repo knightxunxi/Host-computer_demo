@@ -25,6 +25,7 @@ public:
     void processSnapshot(const upkun::domain::DeviceSnapshot& snapshot);
     void acknowledgeCurrentAlarm(const QString& userName);
     void acknowledgeCurrentAlarm(const upkun::domain::User& user);
+    QVector<QStringList> alarmRows(const QString& state, const QString& level, const QString& station, const QString& keyword, int limit = 100) const;
     QVector<QStringList> recentAlarmRows(int limit = 50) const;
     QVector<QStringList> recentOperationRows(int limit = 50) const;
 

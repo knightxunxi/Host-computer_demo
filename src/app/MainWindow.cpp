@@ -245,7 +245,11 @@ void MainWindow::refreshAlarmRecords()
         return;
     }
 
-    m_alarmPage->setAlarmRows(m_alarmService->recentAlarmRows());
+    m_alarmPage->setAlarmRows(m_alarmService->alarmRows(
+        m_alarmPage->stateFilter(),
+        m_alarmPage->levelFilter(),
+        m_alarmPage->stationFilter(),
+        m_alarmPage->keywordFilter()));
     m_alarmPage->setOperationRows(m_alarmService->recentOperationRows());
 }
 

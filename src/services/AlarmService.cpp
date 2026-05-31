@@ -73,6 +73,21 @@ QVector<QStringList> AlarmService::recentAlarmRows(int limit) const
     return m_alarmRepository != nullptr ? m_alarmRepository->recentRows(limit) : QVector<QStringList> {};
 }
 
+QVector<QStringList> AlarmService::alarmRows(const QString& state, const QString& level, const QString& station, const QString& keyword, int limit) const
+{
+    if (m_alarmRepository == nullptr) {
+        return {};
+    }
+
+    upkun::storage::AlarmQueryFilter filter;
+    filter.state = state;
+    filter.level = level;
+    filter.station = station;
+    filter.keyword = keyword;
+    filter.limit = limit;
+    return m_alarmRepository->queryRows(filter);
+}
+
 QVector<QStringList> AlarmService::recentOperationRows(int limit) const
 {
     return m_operationLogRepository != nullptr ? m_operationLogRepository->recentRows(limit) : QVector<QStringList> {};
