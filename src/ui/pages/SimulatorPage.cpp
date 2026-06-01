@@ -164,7 +164,15 @@ void SimulatorPage::updateSnapshot(const upkun::domain::DeviceSnapshot& snapshot
 void SimulatorPage::setListening(bool listening)
 {
     if (m_listeningLabel != nullptr) {
-        m_listeningLabel->setText(listening ? QStringLiteral("监听状态：127.0.0.1:1502") : QStringLiteral("监听状态：未启动"));
+        m_listeningLabel->setText(listening ? QStringLiteral("监听状态：%1").arg(m_endpoint) : QStringLiteral("监听状态：未启动"));
+    }
+}
+
+void SimulatorPage::setEndpoint(const QString& endpoint)
+{
+    m_endpoint = endpoint.trimmed().isEmpty() ? QStringLiteral("127.0.0.1:1502") : endpoint.trimmed();
+    if (m_listeningLabel != nullptr && m_listeningLabel->text() != QStringLiteral("监听状态：未启动")) {
+        m_listeningLabel->setText(QStringLiteral("监听状态：%1").arg(m_endpoint));
     }
 }
 

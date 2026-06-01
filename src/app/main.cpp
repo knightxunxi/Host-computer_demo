@@ -6,12 +6,16 @@
 #include <QCoreApplication>
 #include <QMetaType>
 
+#ifndef UPKUN_APP_VERSION
+#define UPKUN_APP_VERSION "0.17.0"
+#endif
+
 int main(int argc, char* argv[])
 {
     QApplication app(argc, argv);
 
     QCoreApplication::setApplicationName(QStringLiteral("Upkun HMI"));
-    QCoreApplication::setApplicationVersion(QStringLiteral("0.1.0"));
+    QCoreApplication::setApplicationVersion(QStringLiteral(UPKUN_APP_VERSION));
     QCoreApplication::setOrganizationName(QStringLiteral("Upkun"));
 
     qRegisterMetaType<upkun::domain::DeviceCommand>("upkun::domain::DeviceCommand");

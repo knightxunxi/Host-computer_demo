@@ -7,11 +7,14 @@
 namespace upkun::infrastructure {
 
 struct AppConfig {
+    QString sourcePath;
     QString databasePath = QStringLiteral("data/app.sqlite3");
     QString logPath = QStringLiteral("logs");
     upkun::domain::DeviceConnectionConfig device;
 
     static AppConfig defaults();
+    static AppConfig load(const QString& primaryPath = QStringLiteral("config/app.ini"),
+        const QString& fallbackPath = QStringLiteral("config/app.example.ini"));
 };
 
 } // namespace upkun::infrastructure

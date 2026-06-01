@@ -6,11 +6,15 @@
 #include <QHostAddress>
 #include <QTextStream>
 
+#ifndef UPKUN_APP_VERSION
+#define UPKUN_APP_VERSION "0.17.0"
+#endif
+
 int main(int argc, char* argv[])
 {
     QCoreApplication app(argc, argv);
     QCoreApplication::setApplicationName(QStringLiteral("upkun-simulator"));
-    QCoreApplication::setApplicationVersion(QStringLiteral("0.1.0"));
+    QCoreApplication::setApplicationVersion(QStringLiteral(UPKUN_APP_VERSION));
 
     QCommandLineParser parser;
     parser.setApplicationDescription(QStringLiteral("Upkun 包装产线 Modbus TCP 模拟器"));

@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.24)
 
 project(UpkunHmi
-    VERSION 0.1.0
+    VERSION 0.17.0
     DESCRIPTION "C++ Qt industrial HMI learning project"
     LANGUAGES CXX
 )
@@ -71,6 +71,7 @@ qt_add_executable(UpkunHmi WIN32
     src/infrastructure/AppConfig.h
     src/infrastructure/AppConfig.cpp
     src/infrastructure/Logger.h
+    src/infrastructure/Logger.cpp
     src/infrastructure/Result.h
 )
 
@@ -83,6 +84,10 @@ target_link_libraries(UpkunHmi PRIVATE
     Qt6::Network
     Qt6::Sql
     Qt6::Charts
+)
+
+target_compile_definitions(UpkunHmi PRIVATE
+    UPKUN_APP_VERSION="${PROJECT_VERSION}"
 )
 
 qt_add_executable(UpkunSimulator WIN32
@@ -102,6 +107,10 @@ target_include_directories(UpkunSimulator PRIVATE
 target_link_libraries(UpkunSimulator PRIVATE
     Qt6::Core
     Qt6::Network
+)
+
+target_compile_definitions(UpkunSimulator PRIVATE
+    UPKUN_APP_VERSION="${PROJECT_VERSION}"
 )
 
 qt_add_executable(UpkunRegressionTests

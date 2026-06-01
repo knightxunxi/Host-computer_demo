@@ -83,6 +83,9 @@ Qt 运行库
 platforms/
 sqldrivers/
 config/app.example.ini
+data/
+logs/
+RELEASE-CHECKLIST.md
 ```
 
 ## 5. 手工验收场景
@@ -104,6 +107,7 @@ config/app.example.ini
 - 当前部署目标是 Windows 工控机或 Windows 开发机。
 - 需要使用与 Qt 6.10.2 MinGW 匹配的运行库，打包脚本通过 `windeployqt` 收集。
 - `data/` 和 `logs/` 是运行期数据目录，不提交 Git。
+- 程序启动时优先读取 `config/app.ini`，不存在时回退到 `config/app.example.ini`。
 - `config/app.example.ini` 是示例配置，真实部署时可复制为 `config/app.ini` 后修改。
 - 若目标机器端口 `1502` 被占用，模拟器启动会失败；后续会把端口配置做成界面设置项。
 

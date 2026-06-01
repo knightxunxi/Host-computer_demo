@@ -3,6 +3,7 @@
 #include "domain/Batch.h"
 #include "domain/DeviceTypes.h"
 #include "domain/User.h"
+#include "infrastructure/AppConfig.h"
 #include "services/AlarmService.h"
 #include "services/UserSessionService.h"
 #include "storage/AlarmRepository.h"
@@ -102,6 +103,7 @@ private:
     upkun::ui::DiagnosticsPage* m_diagnosticsPage = nullptr;
     QProcess* m_simulatorProcess = nullptr;
     upkun::device::ModbusTcpClient* m_deviceClient = nullptr;
+    upkun::infrastructure::AppConfig m_config;
     upkun::storage::DatabaseManager m_databaseManager;
     upkun::storage::AlarmRepository m_alarmRepository;
     upkun::storage::BatchRepository m_batchRepository;

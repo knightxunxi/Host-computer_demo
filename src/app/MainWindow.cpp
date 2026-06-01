@@ -1,6 +1,7 @@
 #include "app/MainWindow.h"
 
 #include "device/ModbusTcpClient.h"
+#include "infrastructure/Logger.h"
 #include "ui/dialogs/LoginDialog.h"
 #include "ui/pages/AlarmPage.h"
 #include "ui/pages/BatchPage.h"
@@ -136,14 +137,24 @@ QString simulatorExecutablePath()
     return QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("upkun-simulator.exe"));
 }
 
+QString endpointText(const upkun::domain::DeviceConnectionConfig& config)
+{
+    return QStringLiteral("%1:%2").arg(config.host).arg(config.port);
+}
+
 } // namespace
 
 namespace upkun::app {
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
+    , m_config(upkun::infrastructure::AppConfig::load())
 {
-    setWindowTitle(QStringLiteral("Upkun HMI - 小型包装产线上位机"));
+    upkun::infrastructure::initializeLogger(m_config.logPath);
+    upkun::infrastructure::logInfo(QStringLiteral("启动 Upkun HMI %1，配置：%2")
+            .arg(QCoreApplication::applicationVersion(), m_config.sourcePath.isEmpty() ? QStringLiteral("默认配置") : m_config.sourcePath));
+
+    setWindowTitle(QStringLiteral("Upkun HMI %1 - 小型包装产线上位机").arg(QCoreApplication::applicationVersion()));
     resize(1280, 800);
 
     auto* root = new QWidget(this);
@@ -200,6 +211,8 @@ MainWindow::~MainWindow()
             m_simulatorProcess->waitForFinished(1000);
         }
     }
+    upkun::infrastructure::logInfo(QStringLiteral("关闭 Upkun HMI"));
+    upkun::infrastructure::shutdownLogger();
 }
 
 void MainWindow::handleNavigationChanged(int row)
@@ -488,23 +501,24 @@ void MainWindow::exportTrendCsv()
 void MainWindow::startSimulator()
 {
     const QString exePath = simulatorExecutablePath();
+    const QString endpoint = endpointText(m_config.device);
     if (!QFileInfo::exists(exePath)) {
         const QString message = QStringLiteral("未找到独立模拟器：%1").arg(exePath);
         m_alarmLabel->setText(message);
-        appendOperationLog(QStringLiteral("启动模拟器"), QStringLiteral("127.0.0.1:1502"), QStringLiteral("失败"), message);
+        appendOperationLog(QStringLiteral("启动模拟器"), endpoint, QStringLiteral("失败"), message);
         refreshAlarmRecords();
         return;
     }
 
     if (m_simulatorProcess->state() == QProcess::NotRunning) {
         m_simulatorProcess->setProgram(exePath);
-        m_simulatorProcess->setArguments({QStringLiteral("--host"), QStringLiteral("127.0.0.1"), QStringLiteral("--port"), QStringLiteral("1502")});
+        m_simulatorProcess->setArguments({QStringLiteral("--host"), m_config.device.host, QStringLiteral("--port"), QString::number(m_config.device.port)});
         m_simulatorProcess->setProcessChannelMode(QProcess::MergedChannels);
         m_simulatorProcess->start();
         if (!m_simulatorProcess->waitForStarted(3000)) {
             const QString message = m_simulatorProcess->errorString();
             m_alarmLabel->setText(QStringLiteral("模拟器启动失败：%1").arg(message));
-            appendOperationLog(QStringLiteral("启动模拟器"), QStringLiteral("127.0.0.1:1502"), QStringLiteral("失败"), message);
+            appendOperationLog(QStringLiteral("启动模拟器"), endpoint, QStringLiteral("失败"), message);
             refreshAlarmRecords();
             return;
         }
@@ -512,17 +526,16 @@ void MainWindow::startSimulator()
             const QString output = QString::fromLocal8Bit(m_simulatorProcess->readAll()).trimmed();
             const QString message = output.isEmpty() ? m_simulatorProcess->errorString() : output;
             m_alarmLabel->setText(QStringLiteral("模拟器启动失败：%1").arg(message));
-            appendOperationLog(QStringLiteral("启动模拟器"), QStringLiteral("127.0.0.1:1502"), QStringLiteral("失败"), message);
+            appendOperationLog(QStringLiteral("启动模拟器"), endpoint, QStringLiteral("失败"), message);
             refreshAlarmRecords();
             return;
         }
     }
 
     m_simulatorPage->setListening(true);
-    appendOperationLog(QStringLiteral("启动模拟器"), QStringLiteral("127.0.0.1:1502"), QStringLiteral("成功"), QStringLiteral("独立进程"));
+    appendOperationLog(QStringLiteral("启动模拟器"), endpoint, QStringLiteral("成功"), QStringLiteral("独立进程"));
     refreshAlarmRecords();
-    upkun::domain::DeviceConnectionConfig config;
-    m_deviceClient->connectToDevice(config);
+    m_deviceClient->connectToDevice(m_config.device);
 }
 
 void MainWindow::stopSimulator()
@@ -536,7 +549,7 @@ void MainWindow::stopSimulator()
         }
     }
     m_simulatorPage->setListening(false);
-    appendOperationLog(QStringLiteral("停止模拟器"), QStringLiteral("127.0.0.1:1502"), QStringLiteral("成功"), QStringLiteral("已停止监听"));
+    appendOperationLog(QStringLiteral("停止模拟器"), endpointText(m_config.device), QStringLiteral("成功"), QStringLiteral("已停止监听"));
     refreshAlarmRecords();
 }
 
@@ -671,8 +684,9 @@ QLabel* MainWindow::makeStatusLabel(const QString& title, const QString& value)
 void MainWindow::setupStorage()
 {
     QString errorMessage;
-    if (!m_databaseManager.open(QStringLiteral("data/app.sqlite3"), &errorMessage)) {
+    if (!m_databaseManager.open(m_config.databasePath, &errorMessage)) {
         m_alarmLabel->setText(QStringLiteral("数据库初始化失败：%1").arg(errorMessage));
+        upkun::infrastructure::logWarning(QStringLiteral("数据库初始化失败：%1").arg(errorMessage));
         return;
     }
 
@@ -717,7 +731,7 @@ void MainWindow::setupStorage()
     connect(m_trendPage, &upkun::ui::TrendPage::exportRequested,
         this, &MainWindow::exportTrendCsv);
 
-    appendOperationLog(QStringLiteral("启动程序"), QStringLiteral("数据库"), QStringLiteral("成功"), QStringLiteral("data/app.sqlite3"));
+    appendOperationLog(QStringLiteral("启动程序"), QStringLiteral("数据库"), QStringLiteral("成功"), m_config.databasePath);
     refreshAlarmRecords();
     refreshBatchRecords();
 }
@@ -727,6 +741,7 @@ void MainWindow::setupDeviceLink()
     // M14 后模拟器作为独立进程运行，上位机只通过 Modbus TCP 协议连接它。
     m_simulatorProcess = new QProcess(this);
     m_deviceClient = new upkun::device::ModbusTcpClient(this);
+    m_simulatorPage->setEndpoint(endpointText(m_config.device));
 
     connect(m_deviceClient, &upkun::device::ModbusTcpClient::connectionChanged,
         this, &MainWindow::handleConnectionChanged);

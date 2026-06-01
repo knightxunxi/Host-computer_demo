@@ -21,10 +21,13 @@ try {
     }
     New-Item -ItemType Directory -Force -Path $DistDir | Out-Null
     New-Item -ItemType Directory -Force -Path (Join-Path $DistDir 'config') | Out-Null
+    New-Item -ItemType Directory -Force -Path (Join-Path $DistDir 'data') | Out-Null
+    New-Item -ItemType Directory -Force -Path (Join-Path $DistDir 'logs') | Out-Null
 
     Copy-Item -LiteralPath (Join-Path $BuildDir 'upkun-hmi.exe') -Destination $ExePath
     Copy-Item -LiteralPath (Join-Path $BuildDir 'upkun-simulator.exe') -Destination $SimulatorExePath
     Copy-Item -LiteralPath 'config\app.example.ini' -Destination (Join-Path $DistDir 'config\app.example.ini')
+    Copy-Item -LiteralPath 'docs\release-checklist.md' -Destination (Join-Path $DistDir 'RELEASE-CHECKLIST.md')
 
     & "$QtRoot\bin\windeployqt.exe" $ExePath --release --compiler-runtime
 

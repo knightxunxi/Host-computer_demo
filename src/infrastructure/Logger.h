@@ -5,6 +5,9 @@
 
 namespace upkun::infrastructure {
 
+void initializeLogger(const QString& logDirectory);
+void shutdownLogger();
+
 inline void logInfo(const QString& message)
 {
     qInfo().noquote() << message;

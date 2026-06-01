@@ -15,6 +15,7 @@ public:
 
 public slots:
     void updateSnapshot(const upkun::domain::DeviceSnapshot& snapshot);
+    void setEndpoint(const QString& endpoint);
     void setListening(bool listening);
 
 signals:
@@ -31,6 +32,7 @@ private:
     QLabel* m_sensorLabel = nullptr;
     QLabel* m_actuatorLabel = nullptr;
     QLabel* m_qualityLabel = nullptr;
+    QString m_endpoint = QStringLiteral("127.0.0.1:1502");
 };
 
 } // namespace upkun::ui
