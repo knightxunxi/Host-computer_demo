@@ -3,6 +3,7 @@
 #include <QObject>
 #include <QTimer>
 #include <QVector>
+#include <QtGlobal>
 
 namespace upkun::simulator {
 
@@ -34,9 +35,12 @@ private slots:
 private:
     void resetData();
     void handleCommand(int offset);
+    void updateProcessValuesForStation();
     void updateInputs();
     void updateInputRegisters();
     int holdingValue(int offset, int fallback) const;
+    int nextRange(int upperExclusive);
+    int nextNoise(int amplitude);
 
     QVector<bool> m_coils;
     QVector<bool> m_discreteInputs;
@@ -50,6 +54,16 @@ private:
     int m_badCount = 0;
     int m_batchCount = 0;
     int m_alarmCode = 0;
+    int m_cycleTick = 0;
+    int m_speedJitter = 0;
+    int m_lastFillVolume = 500;
+    int m_lastWeight = 500;
+    int m_lastTorque = 125;
+    int m_lastTemperatureDeciCelsius = 245;
+    int m_lastPressureCentiMpa = 62;
+    bool m_lastQualityGood = true;
+    bool m_forceRejectOnce = false;
+    quint32 m_noiseSeed = 0x5a17u;
 };
 
 } // namespace upkun::simulator

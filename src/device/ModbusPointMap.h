@@ -52,6 +52,28 @@ struct DiscreteInputs {
     static constexpr int AirPressureOk = 10003;
     static constexpr int PowerOk = 10004;
     static constexpr int PlcReady = 10005;
+
+    static constexpr int FeedingMaterialReady = 10011;
+    static constexpr int ConveyorRunning = 10021;
+    static constexpr int BottleAtFilling = 10022;
+    static constexpr int BottleAtCapping = 10023;
+    static constexpr int BottleAtLabeling = 10024;
+    static constexpr int BottleAtOutfeed = 10025;
+    static constexpr int FillingValveOk = 10031;
+    static constexpr int FillNozzleDown = 10032;
+    static constexpr int FillComplete = 10033;
+    static constexpr int CapFeederReady = 10041;
+    static constexpr int CapPresent = 10042;
+    static constexpr int CappingComplete = 10043;
+    static constexpr int ScaleReady = 10051;
+    static constexpr int WeightOk = 10052;
+    static constexpr int WeightNg = 10053;
+    static constexpr int LabelPrinterReady = 10061;
+    static constexpr int LabelPaperOk = 10062;
+    static constexpr int RejectCylinderHome = 10071;
+    static constexpr int RejectDetected = 10072;
+    static constexpr int OutfeedJam = 10081;
+    static constexpr int OutfeedReady = 10082;
 };
 
 struct InputRegisters {
@@ -66,6 +88,11 @@ struct InputRegisters {
     static constexpr int BadCount = 30013;
     static constexpr int BatchCount = 30014;
     static constexpr int CurrentSpeed = 30015;
+    static constexpr int ActualFillVolume = 30021;
+    static constexpr int ActualWeight = 30022;
+    static constexpr int ActualTorque = 30023;
+    static constexpr int Temperature = 30024;
+    static constexpr int Pressure = 30025;
 };
 
 struct HoldingRegisters {

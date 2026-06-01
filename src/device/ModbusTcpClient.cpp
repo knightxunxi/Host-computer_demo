@@ -284,6 +284,26 @@ void ModbusTcpClient::decodeDiscreteInputs(const QByteArray& pdu)
     m_snapshot.stationInputs.safetyDoorOk = bitAt(bits, modbus::toDiscreteInputOffset(modbus::DiscreteInputs::SafetyDoorOk));
     m_snapshot.stationInputs.airPressureOk = bitAt(bits, modbus::toDiscreteInputOffset(modbus::DiscreteInputs::AirPressureOk));
     m_snapshot.stationInputs.plcReady = bitAt(bits, modbus::toDiscreteInputOffset(modbus::DiscreteInputs::PlcReady));
+    m_snapshot.stationInputs.feedingMaterialReady = bitAt(bits, modbus::toDiscreteInputOffset(modbus::DiscreteInputs::FeedingMaterialReady));
+    m_snapshot.stationInputs.conveyorRunning = bitAt(bits, modbus::toDiscreteInputOffset(modbus::DiscreteInputs::ConveyorRunning));
+    m_snapshot.stationInputs.bottleAtFilling = bitAt(bits, modbus::toDiscreteInputOffset(modbus::DiscreteInputs::BottleAtFilling));
+    m_snapshot.stationInputs.bottleAtCapping = bitAt(bits, modbus::toDiscreteInputOffset(modbus::DiscreteInputs::BottleAtCapping));
+    m_snapshot.stationInputs.bottleAtLabeling = bitAt(bits, modbus::toDiscreteInputOffset(modbus::DiscreteInputs::BottleAtLabeling));
+    m_snapshot.stationInputs.bottleAtOutfeed = bitAt(bits, modbus::toDiscreteInputOffset(modbus::DiscreteInputs::BottleAtOutfeed));
+    m_snapshot.stationInputs.fillingValveOk = bitAt(bits, modbus::toDiscreteInputOffset(modbus::DiscreteInputs::FillingValveOk));
+    m_snapshot.stationInputs.fillComplete = bitAt(bits, modbus::toDiscreteInputOffset(modbus::DiscreteInputs::FillComplete));
+    m_snapshot.stationInputs.capFeederReady = bitAt(bits, modbus::toDiscreteInputOffset(modbus::DiscreteInputs::CapFeederReady));
+    m_snapshot.stationInputs.capPresent = bitAt(bits, modbus::toDiscreteInputOffset(modbus::DiscreteInputs::CapPresent));
+    m_snapshot.stationInputs.cappingComplete = bitAt(bits, modbus::toDiscreteInputOffset(modbus::DiscreteInputs::CappingComplete));
+    m_snapshot.stationInputs.scaleReady = bitAt(bits, modbus::toDiscreteInputOffset(modbus::DiscreteInputs::ScaleReady));
+    m_snapshot.stationInputs.weightOk = bitAt(bits, modbus::toDiscreteInputOffset(modbus::DiscreteInputs::WeightOk));
+    m_snapshot.stationInputs.weightNg = bitAt(bits, modbus::toDiscreteInputOffset(modbus::DiscreteInputs::WeightNg));
+    m_snapshot.stationInputs.labelPrinterReady = bitAt(bits, modbus::toDiscreteInputOffset(modbus::DiscreteInputs::LabelPrinterReady));
+    m_snapshot.stationInputs.labelPaperOk = bitAt(bits, modbus::toDiscreteInputOffset(modbus::DiscreteInputs::LabelPaperOk));
+    m_snapshot.stationInputs.rejectCylinderHome = bitAt(bits, modbus::toDiscreteInputOffset(modbus::DiscreteInputs::RejectCylinderHome));
+    m_snapshot.stationInputs.rejectDetected = bitAt(bits, modbus::toDiscreteInputOffset(modbus::DiscreteInputs::RejectDetected));
+    m_snapshot.stationInputs.outfeedReady = bitAt(bits, modbus::toDiscreteInputOffset(modbus::DiscreteInputs::OutfeedReady));
+    m_snapshot.stationInputs.outfeedJam = bitAt(bits, modbus::toDiscreteInputOffset(modbus::DiscreteInputs::OutfeedJam));
 }
 
 void ModbusTcpClient::decodeInputRegisters(const QByteArray& pdu)
@@ -308,11 +328,11 @@ void ModbusTcpClient::decodeInputRegisters(const QByteArray& pdu)
     m_snapshot.counters.bad = reg(modbus::toInputRegisterOffset(modbus::InputRegisters::BadCount));
     m_snapshot.counters.batch = reg(modbus::toInputRegisterOffset(modbus::InputRegisters::BatchCount));
     m_snapshot.counters.speed = reg(modbus::toInputRegisterOffset(modbus::InputRegisters::CurrentSpeed));
-    m_snapshot.processValues.fillVolumeMl = reg(modbus::toInputRegisterOffset(30021));
-    m_snapshot.processValues.weightGram = reg(modbus::toInputRegisterOffset(30022));
-    m_snapshot.processValues.torqueCentinewtonMeter = reg(modbus::toInputRegisterOffset(30023));
-    m_snapshot.processValues.temperatureDeciCelsius = reg(modbus::toInputRegisterOffset(30024));
-    m_snapshot.processValues.pressureCentiMpa = reg(modbus::toInputRegisterOffset(30025));
+    m_snapshot.processValues.fillVolumeMl = reg(modbus::toInputRegisterOffset(modbus::InputRegisters::ActualFillVolume));
+    m_snapshot.processValues.weightGram = reg(modbus::toInputRegisterOffset(modbus::InputRegisters::ActualWeight));
+    m_snapshot.processValues.torqueCentinewtonMeter = reg(modbus::toInputRegisterOffset(modbus::InputRegisters::ActualTorque));
+    m_snapshot.processValues.temperatureDeciCelsius = reg(modbus::toInputRegisterOffset(modbus::InputRegisters::Temperature));
+    m_snapshot.processValues.pressureCentiMpa = reg(modbus::toInputRegisterOffset(modbus::InputRegisters::Pressure));
 }
 
 quint16 ModbusTcpClient::nextTransactionId()

@@ -14,6 +14,40 @@ int clampPercent(int value)
     return std::clamp(value, 0, 100);
 }
 
+quint16 clampRegister(int value)
+{
+    return static_cast<quint16>(std::clamp(value, 0, 65535));
+}
+
+int stationForAlarm(int alarmCode)
+{
+    if (alarmCode >= 2000 && alarmCode < 3000) {
+        return static_cast<int>(upkun::domain::Station::Feeding);
+    }
+    if (alarmCode >= 3000 && alarmCode < 4000) {
+        return static_cast<int>(upkun::domain::Station::Conveying);
+    }
+    if (alarmCode >= 4000 && alarmCode < 5000) {
+        return static_cast<int>(upkun::domain::Station::Filling);
+    }
+    if (alarmCode >= 5000 && alarmCode < 6000) {
+        return static_cast<int>(upkun::domain::Station::Capping);
+    }
+    if (alarmCode >= 6000 && alarmCode < 7000) {
+        return static_cast<int>(upkun::domain::Station::Inspecting);
+    }
+    if (alarmCode >= 7000 && alarmCode < 8000) {
+        return static_cast<int>(upkun::domain::Station::Labeling);
+    }
+    if (alarmCode >= 8000 && alarmCode < 9000) {
+        return static_cast<int>(upkun::domain::Station::Rejecting);
+    }
+    if (alarmCode >= 9000 && alarmCode < 10000) {
+        return static_cast<int>(upkun::domain::Station::Outfeeding);
+    }
+    return 0;
+}
+
 } // namespace
 
 namespace upkun::simulator {
@@ -100,7 +134,10 @@ void LineSimulator::triggerAlarm(int alarmCode)
 {
     m_alarmCode = alarmCode;
     m_running = false;
-    m_activeStation = 0;
+    m_activeStation = stationForAlarm(alarmCode);
+    if (alarmCode == 6002) {
+        m_lastQualityGood = false;
+    }
     updateInputs();
     updateInputRegisters();
     emit stateChanged();
@@ -118,6 +155,14 @@ void LineSimulator::clearAlarm()
 
 void LineSimulator::advanceCycle()
 {
+    ++m_cycleTick;
+    const int targetSpeed = holdingValue(
+        upkun::device::modbus::toHoldingRegisterOffset(upkun::device::modbus::HoldingRegisters::TargetSpeed),
+        60);
+    m_speedJitter = nextNoise(std::max(1, targetSpeed / 12));
+    m_lastTemperatureDeciCelsius = 245 + nextNoise(2);
+    m_lastPressureCentiMpa = 62 + nextNoise(1);
+
     if (!m_running || m_alarmCode != 0) {
         updateInputs();
         updateInputRegisters();
@@ -125,18 +170,18 @@ void LineSimulator::advanceCycle()
         return;
     }
 
-    // 学习版用每秒切换一个工位来模拟全自动包装线的节拍。
-    m_activeStation = m_activeStation % 8 + 1;
+    // 速度扰动为负且达到固定节拍点时，让当前工位多停留一拍，模拟现场节拍波动。
+    const bool holdForSlowBeat = m_speedJitter < 0 && m_cycleTick % 5 == 0;
+    if (!holdForSlowBeat) {
+        m_activeStation = m_activeStation % 8 + 1;
+        updateProcessValuesForStation();
+    }
 
     if (m_activeStation == static_cast<int>(upkun::domain::Station::Outfeeding)) {
-        // 产品到达下料工位时才计一次产量；质量率来自配方中的模拟参数。
-        const int qualityRate = clampPercent(holdingValue(
-            upkun::device::modbus::toHoldingRegisterOffset(upkun::device::modbus::HoldingRegisters::SimQualityRate),
-            98));
-        const bool good = (m_totalCount % 100) < qualityRate;
+        // 检测工位先给出本件产品质量，下料工位再统一计数，接近真实产线的追溯流程。
         ++m_totalCount;
         ++m_batchCount;
-        if (good) {
+        if (m_lastQualityGood) {
             ++m_goodCount;
         } else {
             ++m_badCount;
@@ -154,6 +199,20 @@ void LineSimulator::resetData()
     std::fill(m_discreteInputs.begin(), m_discreteInputs.end(), false);
     std::fill(m_holdingRegisters.begin(), m_holdingRegisters.end(), 0);
     std::fill(m_inputRegisters.begin(), m_inputRegisters.end(), 0);
+
+    m_alarmCode = 0;
+    m_running = false;
+    m_activeStation = 0;
+    m_cycleTick = 0;
+    m_speedJitter = 0;
+    m_lastFillVolume = 500;
+    m_lastWeight = 500;
+    m_lastTorque = 125;
+    m_lastTemperatureDeciCelsius = 245;
+    m_lastPressureCentiMpa = 62;
+    m_lastQualityGood = true;
+    m_forceRejectOnce = false;
+    m_noiseSeed = 0x5a17u;
 
     // 默认保持寄存器相当于 PLC 里的初始工艺参数，配方下发会覆盖这些值。
     m_holdingRegisters[upkun::device::modbus::toHoldingRegisterOffset(upkun::device::modbus::HoldingRegisters::TargetSpeed)] = 60;
@@ -198,8 +257,47 @@ void LineSimulator::handleCommand(int offset)
         m_batchCount = 0;
     } else if (offset == toCoilOffset(Coils::CmdBatchEnd)) {
         m_batchCount = 0;
+    } else if (offset == toCoilOffset(Coils::CmdRejectTest)) {
+        // 剔除测试不立即报警，而是让下一件产品走一次不良/剔除流程。
+        m_forceRejectOnce = true;
     } else if (offset == toCoilOffset(Coils::CmdSimFault)) {
         triggerAlarm(5001);
+    }
+}
+
+void LineSimulator::updateProcessValuesForStation()
+{
+    using upkun::device::modbus::HoldingRegisters;
+    using upkun::device::modbus::toHoldingRegisterOffset;
+
+    const int fillBase = holdingValue(toHoldingRegisterOffset(HoldingRegisters::FillVolume), 500);
+    const int torqueBase = holdingValue(toHoldingRegisterOffset(HoldingRegisters::CappingTorque), 125);
+    const int weightMin = holdingValue(toHoldingRegisterOffset(HoldingRegisters::WeightMin), 480);
+    const int weightMax = holdingValue(toHoldingRegisterOffset(HoldingRegisters::WeightMax), 520);
+    const int qualityRate = clampPercent(holdingValue(toHoldingRegisterOffset(HoldingRegisters::SimQualityRate), 98));
+
+    if (m_activeStation == static_cast<int>(upkun::domain::Station::Filling)) {
+        m_lastFillVolume = std::max(0, fillBase + nextNoise(std::max(1, fillBase / 100)));
+    }
+
+    if (m_activeStation == static_cast<int>(upkun::domain::Station::Capping)) {
+        m_lastTorque = std::max(0, torqueBase + nextNoise(std::max(1, torqueBase / 20)));
+    }
+
+    if (m_activeStation == static_cast<int>(upkun::domain::Station::Inspecting)) {
+        const bool randomGood = nextRange(100) < qualityRate;
+        m_lastQualityGood = randomGood && !m_forceRejectOnce;
+        m_forceRejectOnce = false;
+
+        if (m_lastQualityGood) {
+            const int center = (weightMin + weightMax) / 2;
+            const int amplitude = std::max(1, (weightMax - weightMin) / 4);
+            m_lastWeight = std::clamp(center + nextNoise(amplitude), weightMin, weightMax);
+        } else if (nextRange(2) == 0) {
+            m_lastWeight = std::max(0, weightMin - 5 - nextRange(12));
+        } else {
+            m_lastWeight = weightMax + 5 + nextRange(12);
+        }
     }
 }
 
@@ -209,35 +307,34 @@ void LineSimulator::updateInputs()
     using upkun::device::modbus::toDiscreteInputOffset;
 
     std::fill(m_discreteInputs.begin(), m_discreteInputs.end(), false);
-    // 公共安全联锁默认正常；报警注入主要通过具体工位传感器改变状态。
-    m_discreteInputs[toDiscreteInputOffset(DiscreteInputs::EstopOk)] = true;
-    m_discreteInputs[toDiscreteInputOffset(DiscreteInputs::SafetyDoorOk)] = true;
-    m_discreteInputs[toDiscreteInputOffset(DiscreteInputs::AirPressureOk)] = true;
+    // 公共安全联锁默认正常；公共报警会直接改变对应传感器，方便上位机联调。
+    m_discreteInputs[toDiscreteInputOffset(DiscreteInputs::EstopOk)] = m_alarmCode != 1001;
+    m_discreteInputs[toDiscreteInputOffset(DiscreteInputs::SafetyDoorOk)] = m_alarmCode != 1002;
+    m_discreteInputs[toDiscreteInputOffset(DiscreteInputs::AirPressureOk)] = m_alarmCode != 1003;
     m_discreteInputs[toDiscreteInputOffset(DiscreteInputs::PowerOk)] = true;
     m_discreteInputs[toDiscreteInputOffset(DiscreteInputs::PlcReady)] = true;
 
-    // 以下偏移暂按点位表初版直接映射，后续 M13 会继续命名化和细化传感器。
-    m_discreteInputs[10] = true;
-    m_discreteInputs[20] = m_running;
-    m_discreteInputs[21] = m_activeStation == 3;
-    m_discreteInputs[22] = m_activeStation == 4;
-    m_discreteInputs[23] = m_activeStation == 6;
-    m_discreteInputs[24] = m_activeStation == 8;
-    m_discreteInputs[30] = m_alarmCode != 4001;
-    m_discreteInputs[31] = m_activeStation != 3;
-    m_discreteInputs[32] = m_activeStation == 3;
-    m_discreteInputs[40] = m_alarmCode != 5001;
-    m_discreteInputs[41] = m_activeStation != 4;
-    m_discreteInputs[42] = m_activeStation == 4;
-    m_discreteInputs[50] = true;
-    m_discreteInputs[51] = m_alarmCode == 0;
-    m_discreteInputs[52] = m_alarmCode == 6002;
-    m_discreteInputs[60] = m_alarmCode != 7001;
-    m_discreteInputs[61] = m_alarmCode != 7002;
-    m_discreteInputs[70] = m_activeStation != 7;
-    m_discreteInputs[71] = m_activeStation == 7;
-    m_discreteInputs[80] = m_alarmCode == 9001;
-    m_discreteInputs[81] = true;
+    m_discreteInputs[toDiscreteInputOffset(DiscreteInputs::FeedingMaterialReady)] = m_alarmCode != 2001;
+    m_discreteInputs[toDiscreteInputOffset(DiscreteInputs::ConveyorRunning)] = m_running && m_alarmCode != 3001;
+    m_discreteInputs[toDiscreteInputOffset(DiscreteInputs::BottleAtFilling)] = m_activeStation == static_cast<int>(upkun::domain::Station::Filling) && m_alarmCode != 2001;
+    m_discreteInputs[toDiscreteInputOffset(DiscreteInputs::BottleAtCapping)] = m_activeStation == static_cast<int>(upkun::domain::Station::Capping);
+    m_discreteInputs[toDiscreteInputOffset(DiscreteInputs::BottleAtLabeling)] = m_activeStation == static_cast<int>(upkun::domain::Station::Labeling);
+    m_discreteInputs[toDiscreteInputOffset(DiscreteInputs::BottleAtOutfeed)] = m_activeStation == static_cast<int>(upkun::domain::Station::Outfeeding);
+    m_discreteInputs[toDiscreteInputOffset(DiscreteInputs::FillingValveOk)] = m_alarmCode != 4001;
+    m_discreteInputs[toDiscreteInputOffset(DiscreteInputs::FillNozzleDown)] = m_activeStation == static_cast<int>(upkun::domain::Station::Filling);
+    m_discreteInputs[toDiscreteInputOffset(DiscreteInputs::FillComplete)] = m_activeStation == static_cast<int>(upkun::domain::Station::Filling) && m_alarmCode != 4002;
+    m_discreteInputs[toDiscreteInputOffset(DiscreteInputs::CapFeederReady)] = m_alarmCode != 5001;
+    m_discreteInputs[toDiscreteInputOffset(DiscreteInputs::CapPresent)] = m_activeStation == static_cast<int>(upkun::domain::Station::Capping) && m_alarmCode != 5001;
+    m_discreteInputs[toDiscreteInputOffset(DiscreteInputs::CappingComplete)] = m_activeStation == static_cast<int>(upkun::domain::Station::Capping) && m_alarmCode != 5002;
+    m_discreteInputs[toDiscreteInputOffset(DiscreteInputs::ScaleReady)] = m_alarmCode != 6001;
+    m_discreteInputs[toDiscreteInputOffset(DiscreteInputs::WeightOk)] = m_lastQualityGood && m_alarmCode != 6002;
+    m_discreteInputs[toDiscreteInputOffset(DiscreteInputs::WeightNg)] = !m_lastQualityGood || m_alarmCode == 6002;
+    m_discreteInputs[toDiscreteInputOffset(DiscreteInputs::LabelPrinterReady)] = m_alarmCode != 7002;
+    m_discreteInputs[toDiscreteInputOffset(DiscreteInputs::LabelPaperOk)] = m_alarmCode != 7001;
+    m_discreteInputs[toDiscreteInputOffset(DiscreteInputs::RejectCylinderHome)] = m_alarmCode != 8001;
+    m_discreteInputs[toDiscreteInputOffset(DiscreteInputs::RejectDetected)] = m_activeStation == static_cast<int>(upkun::domain::Station::Rejecting) && !m_lastQualityGood;
+    m_discreteInputs[toDiscreteInputOffset(DiscreteInputs::OutfeedJam)] = m_alarmCode == 9001;
+    m_discreteInputs[toDiscreteInputOffset(DiscreteInputs::OutfeedReady)] = m_alarmCode != 9001;
 }
 
 void LineSimulator::updateInputRegisters()
@@ -261,20 +358,37 @@ void LineSimulator::updateInputRegisters()
     m_inputRegisters[toInputRegisterOffset(InputRegisters::GoodCount)] = static_cast<quint16>(m_goodCount);
     m_inputRegisters[toInputRegisterOffset(InputRegisters::BadCount)] = static_cast<quint16>(m_badCount);
     m_inputRegisters[toInputRegisterOffset(InputRegisters::BatchCount)] = static_cast<quint16>(m_batchCount);
-    m_inputRegisters[toInputRegisterOffset(InputRegisters::CurrentSpeed)] = static_cast<quint16>(m_running ? holdingValue(upkun::device::modbus::toHoldingRegisterOffset(upkun::device::modbus::HoldingRegisters::TargetSpeed), 60) : 0);
-
-    const int fillVolume = holdingValue(upkun::device::modbus::toHoldingRegisterOffset(upkun::device::modbus::HoldingRegisters::FillVolume), 500);
-    const int torque = holdingValue(upkun::device::modbus::toHoldingRegisterOffset(upkun::device::modbus::HoldingRegisters::CappingTorque), 125);
-    m_inputRegisters[toInputRegisterOffset(30021)] = static_cast<quint16>(m_activeStation >= 3 ? fillVolume : 0);
-    m_inputRegisters[toInputRegisterOffset(30022)] = static_cast<quint16>(m_activeStation >= 5 ? fillVolume : 0);
-    m_inputRegisters[toInputRegisterOffset(30023)] = static_cast<quint16>(m_activeStation >= 4 ? torque : 0);
-    m_inputRegisters[toInputRegisterOffset(30024)] = 245;
-    m_inputRegisters[toInputRegisterOffset(30025)] = 62;
+    const int targetSpeed = holdingValue(upkun::device::modbus::toHoldingRegisterOffset(upkun::device::modbus::HoldingRegisters::TargetSpeed), 60);
+    m_inputRegisters[toInputRegisterOffset(InputRegisters::CurrentSpeed)] = clampRegister(m_running ? targetSpeed + m_speedJitter : 0);
+    m_inputRegisters[toInputRegisterOffset(InputRegisters::ActualFillVolume)] = clampRegister(m_activeStation >= 3 ? m_lastFillVolume : 0);
+    m_inputRegisters[toInputRegisterOffset(InputRegisters::ActualWeight)] = clampRegister(m_activeStation >= 5 ? m_lastWeight : 0);
+    m_inputRegisters[toInputRegisterOffset(InputRegisters::ActualTorque)] = clampRegister(m_activeStation >= 4 ? m_lastTorque : 0);
+    m_inputRegisters[toInputRegisterOffset(InputRegisters::Temperature)] = clampRegister(m_lastTemperatureDeciCelsius);
+    m_inputRegisters[toInputRegisterOffset(InputRegisters::Pressure)] = clampRegister(m_lastPressureCentiMpa);
 }
 
 int LineSimulator::holdingValue(int offset, int fallback) const
 {
     return offset >= 0 && offset < m_holdingRegisters.size() ? static_cast<int>(m_holdingRegisters.at(offset)) : fallback;
+}
+
+int LineSimulator::nextRange(int upperExclusive)
+{
+    if (upperExclusive <= 0) {
+        return 0;
+    }
+
+    m_noiseSeed = m_noiseSeed * 1664525u + 1013904223u;
+    return static_cast<int>((m_noiseSeed >> 16) % static_cast<quint32>(upperExclusive));
+}
+
+int LineSimulator::nextNoise(int amplitude)
+{
+    if (amplitude <= 0) {
+        return 0;
+    }
+
+    return nextRange(amplitude * 2 + 1) - amplitude;
 }
 
 } // namespace upkun::simulator

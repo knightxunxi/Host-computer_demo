@@ -76,6 +76,26 @@ struct StationInputs {
     bool safetyDoorOk = true;
     bool airPressureOk = true;
     bool plcReady = false;
+    bool feedingMaterialReady = true;
+    bool conveyorRunning = false;
+    bool bottleAtFilling = false;
+    bool bottleAtCapping = false;
+    bool bottleAtLabeling = false;
+    bool bottleAtOutfeed = false;
+    bool fillingValveOk = true;
+    bool fillComplete = false;
+    bool capFeederReady = true;
+    bool capPresent = false;
+    bool cappingComplete = false;
+    bool scaleReady = true;
+    bool weightOk = true;
+    bool weightNg = false;
+    bool labelPrinterReady = true;
+    bool labelPaperOk = true;
+    bool rejectCylinderHome = true;
+    bool rejectDetected = false;
+    bool outfeedReady = true;
+    bool outfeedJam = false;
 };
 
 struct DeviceSnapshot {

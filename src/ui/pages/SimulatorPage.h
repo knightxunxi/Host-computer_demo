@@ -27,6 +27,10 @@ private:
     QLabel* m_listeningLabel = nullptr;
     QLabel* m_alarmLabel = nullptr;
     QLabel* m_countLabel = nullptr;
+    QLabel* m_processLabel = nullptr;
+    QLabel* m_sensorLabel = nullptr;
+    QLabel* m_actuatorLabel = nullptr;
+    QLabel* m_qualityLabel = nullptr;
 };
 
 } // namespace upkun::ui
