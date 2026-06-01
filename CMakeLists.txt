@@ -14,7 +14,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Widgets Network Sql Charts)
+find_package(Qt6 REQUIRED COMPONENTS Core Widgets Network Sql Charts)
 
 qt_standard_project_setup()
 
@@ -51,10 +51,6 @@ qt_add_executable(UpkunHmi WIN32
     src/device/ModbusTcpClient.h
     src/device/ModbusTcpClient.cpp
     src/device/ModbusPointMap.h
-    src/simulator/LineSimulator.h
-    src/simulator/LineSimulator.cpp
-    src/simulator/SimulatedModbusServer.h
-    src/simulator/SimulatedModbusServer.cpp
     src/storage/DatabaseManager.h
     src/storage/DatabaseManager.cpp
     src/storage/AlarmRepository.h
@@ -86,16 +82,41 @@ target_link_libraries(UpkunHmi PRIVATE
     Qt6::Charts
 )
 
+qt_add_executable(UpkunSimulator WIN32
+    src/simulator/main.cpp
+    src/simulator/LineSimulator.h
+    src/simulator/LineSimulator.cpp
+    src/simulator/SimulatedModbusServer.h
+    src/simulator/SimulatedModbusServer.cpp
+    src/device/ModbusPointMap.h
+    src/domain/DeviceTypes.h
+)
+
+target_include_directories(UpkunSimulator PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_link_libraries(UpkunSimulator PRIVATE
+    Qt6::Core
+    Qt6::Network
+)
+
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    target_compile_options(UpkunHmi PRIVATE
-        -Wall
-        -Wextra
-        -Wpedantic
-        -finput-charset=UTF-8
-        -fexec-charset=UTF-8
-    )
+    foreach(target_name UpkunHmi UpkunSimulator)
+        target_compile_options(${target_name} PRIVATE
+            -Wall
+            -Wextra
+            -Wpedantic
+            -finput-charset=UTF-8
+            -fexec-charset=UTF-8
+        )
+    endforeach()
 endif()
 
 set_target_properties(UpkunHmi PROPERTIES
     OUTPUT_NAME "upkun-hmi"
+)
+
+set_target_properties(UpkunSimulator PROPERTIES
+    OUTPUT_NAME "upkun-simulator"
 )

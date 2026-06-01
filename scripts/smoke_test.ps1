@@ -60,8 +60,16 @@ try {
         if ($client) {
             $client.Close()
         }
+        $children = @()
+        if ($process) {
+            $children = Get-CimInstance Win32_Process -Filter "ParentProcessId=$($process.Id)" -ErrorAction SilentlyContinue |
+                Where-Object { $_.Name -eq 'upkun-simulator.exe' }
+        }
         if ($process -and -not $process.HasExited) {
             Stop-Process -Id $process.Id -Force
+        }
+        foreach ($child in $children) {
+            Stop-Process -Id $child.ProcessId -Force -ErrorAction SilentlyContinue
         }
     }
 } finally {

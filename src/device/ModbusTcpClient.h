@@ -20,6 +20,7 @@ public slots:
     void disconnectFromDevice() override;
     void sendCommand(upkun::domain::DeviceCommand command) override;
     void writeRecipe(const upkun::domain::RecipeParameters& recipe) override;
+    void injectFault(int alarmCode);
 
 private slots:
     void poll();
@@ -34,7 +35,8 @@ private:
         ReadDiscreteInputs,
         ReadInputRegisters,
         WriteCommand,
-        WriteRecipe
+        WriteRecipe,
+        WriteRegister
     };
 
     struct PendingRequest {
@@ -44,6 +46,7 @@ private:
 
     void sendReadRequest(quint8 function, quint16 address, quint16 quantity, RequestKind kind);
     void sendWriteSingleCoil(quint16 address, bool value, upkun::domain::DeviceCommand command);
+    void sendWriteSingleRegister(quint16 address, quint16 value);
     void sendWriteMultipleRegisters(quint16 address, const QVector<quint16>& values);
     void sendAdu(quint8 function, const QByteArray& payload, PendingRequest request);
     void processResponse(const QByteArray& adu);

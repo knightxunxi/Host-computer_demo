@@ -101,7 +101,7 @@ Qt 桌面进程
   Device Worker Thread
     ModbusTcpClient
     Polling Timer
-  Simulator Worker Thread
+  Simulator Process
     ModbusTcpServer
     LineSimulator
   Database Worker Thread
@@ -112,11 +112,11 @@ Qt 桌面进程
 
 - UI 线程只更新界面，不执行长耗时通信或数据库写入。
 - 通信线程负责连接、轮询、命令下发和重连。
-- 模拟器线程负责虚拟产线节拍、点位变化和故障注入。
+- 模拟器进程负责虚拟产线节拍、点位变化和故障注入。
 - 数据库线程负责写报警、操作日志、批次和趋势数据。
 - 跨线程通过 Qt signal/slot queued connection 传递快照、命令结果和错误。
 
-后续接真实设备时，可以关闭内置模拟器，只保留 `IDeviceClient` 连接真实 PLC 或外部模拟器。
+后续接真实设备时，可以停止独立模拟器进程，只保留 `IDeviceClient` 连接真实 PLC 或外部模拟器。
 
 ## 7. 核心接口设计
 
@@ -362,6 +362,7 @@ D:\C1\upkun
       ModbusTcpClient.h
       ModbusPointMap.h
     simulator/
+      main.cpp
       LineSimulator.h
       SimulatedModbusServer.h
     storage/

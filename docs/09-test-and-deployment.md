@@ -21,7 +21,7 @@
 ```text
 1. CMake 配置和构建成功。
 2. upkun-hmi.exe 可隐藏启动。
-3. 内置 Modbus TCP 模拟器监听 127.0.0.1:1502。
+3. 独立 Modbus TCP 模拟器进程监听 127.0.0.1:1502。
 4. 读取输入寄存器功能码 0x04 有响应。
 5. 可以写 Coil 触发模拟故障和复位。
 6. SQLite 数据库 data/app.sqlite3 被创建。
@@ -52,6 +52,7 @@ dist/upkun-hmi.zip
 
 ```text
 upkun-hmi.exe
+upkun-simulator.exe
 Qt 运行库
 platforms/
 sqldrivers/

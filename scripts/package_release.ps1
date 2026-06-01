@@ -9,6 +9,7 @@ $BuildDir = Join-Path $Root 'build-release'
 $DistDir = Join-Path $Root 'dist\upkun-hmi'
 $ZipPath = Join-Path $Root 'dist\upkun-hmi.zip'
 $ExePath = Join-Path $DistDir 'upkun-hmi.exe'
+$SimulatorExePath = Join-Path $DistDir 'upkun-simulator.exe'
 
 Push-Location $Root
 try {
@@ -22,6 +23,7 @@ try {
     New-Item -ItemType Directory -Force -Path (Join-Path $DistDir 'config') | Out-Null
 
     Copy-Item -LiteralPath (Join-Path $BuildDir 'upkun-hmi.exe') -Destination $ExePath
+    Copy-Item -LiteralPath (Join-Path $BuildDir 'upkun-simulator.exe') -Destination $SimulatorExePath
     Copy-Item -LiteralPath 'config\app.example.ini' -Destination (Join-Path $DistDir 'config\app.example.ini')
 
     & "$QtRoot\bin\windeployqt.exe" $ExePath --release --compiler-runtime

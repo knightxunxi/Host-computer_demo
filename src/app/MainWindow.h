@@ -17,16 +17,13 @@
 #include <QLabel>
 #include <QListWidget>
 #include <QMainWindow>
+#include <QProcess>
 #include <QPushButton>
 #include <QStackedWidget>
 #include <optional>
 
 namespace upkun::device {
 class ModbusTcpClient;
-}
-
-namespace upkun::simulator {
-class SimulatedModbusServer;
 }
 
 namespace upkun::ui {
@@ -45,6 +42,7 @@ class MainWindow final : public QMainWindow {
 
 public:
     explicit MainWindow(QWidget* parent = nullptr);
+    ~MainWindow() override;
 
 private slots:
     void handleNavigationChanged(int row);
@@ -99,7 +97,7 @@ private:
     upkun::ui::RecipePage* m_recipePage = nullptr;
     upkun::ui::TrendPage* m_trendPage = nullptr;
     upkun::ui::SimulatorPage* m_simulatorPage = nullptr;
-    upkun::simulator::SimulatedModbusServer* m_simulatedServer = nullptr;
+    QProcess* m_simulatorProcess = nullptr;
     upkun::device::ModbusTcpClient* m_deviceClient = nullptr;
     upkun::storage::DatabaseManager m_databaseManager;
     upkun::storage::AlarmRepository m_alarmRepository;

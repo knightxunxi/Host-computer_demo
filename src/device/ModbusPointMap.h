@@ -107,6 +107,7 @@ struct HoldingRegisters {
     static constexpr int BatchTargetCount = 40008;
     static constexpr int AlarmDelay = 40009;
     static constexpr int SimQualityRate = 40010;
+    static constexpr int SimFaultCode = 40011;
 };
 
 } // namespace upkun::device::modbus

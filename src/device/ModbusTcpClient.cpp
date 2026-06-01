@@ -131,6 +131,22 @@ void ModbusTcpClient::writeRecipe(const upkun::domain::RecipeParameters& recipe)
     sendWriteMultipleRegisters(0, values);
 }
 
+void ModbusTcpClient::injectFault(int alarmCode)
+{
+    if (m_socket.state() != QAbstractSocket::ConnectedState) {
+        emit commandFinished(upkun::domain::DeviceCommand::SimFault, false, QStringLiteral("PLC/模拟器未连接"));
+        return;
+    }
+
+    sendWriteSingleRegister(
+        static_cast<quint16>(modbus::toHoldingRegisterOffset(modbus::HoldingRegisters::SimFaultCode)),
+        static_cast<quint16>(alarmCode));
+    sendWriteSingleCoil(
+        static_cast<quint16>(modbus::toCoilOffset(modbus::Coils::CmdSimFault)),
+        true,
+        upkun::domain::DeviceCommand::SimFault);
+}
+
 void ModbusTcpClient::poll()
 {
     if (m_socket.state() != QAbstractSocket::ConnectedState) {
@@ -209,6 +225,14 @@ void ModbusTcpClient::sendWriteSingleCoil(quint16 address, bool value, upkun::do
     sendAdu(0x05, payload, {RequestKind::WriteCommand, command});
 }
 
+void ModbusTcpClient::sendWriteSingleRegister(quint16 address, quint16 value)
+{
+    QByteArray payload;
+    appendU16(&payload, address);
+    appendU16(&payload, value);
+    sendAdu(0x06, payload, {RequestKind::WriteRegister, upkun::domain::DeviceCommand::SimFault});
+}
+
 void ModbusTcpClient::sendWriteMultipleRegisters(quint16 address, const QVector<quint16>& values)
 {
     QByteArray payload;
@@ -268,6 +292,7 @@ void ModbusTcpClient::processResponse(const QByteArray& adu)
         poll();
         break;
     case RequestKind::WriteRecipe:
+    case RequestKind::WriteRegister:
         poll();
         break;
     }

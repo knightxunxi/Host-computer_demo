@@ -1,7 +1,6 @@
 #include "app/MainWindow.h"
 
 #include "device/ModbusTcpClient.h"
-#include "simulator/SimulatedModbusServer.h"
 #include "ui/dialogs/LoginDialog.h"
 #include "ui/pages/AlarmPage.h"
 #include "ui/pages/BatchPage.h"
@@ -10,9 +9,11 @@
 #include "ui/pages/SimulatorPage.h"
 #include "ui/pages/TrendPage.h"
 
+#include <QCoreApplication>
 #include <QDialog>
+#include <QDir>
+#include <QFileInfo>
 #include <QFrame>
-#include <QHostAddress>
 #include <QHBoxLayout>
 #include <QListWidgetItem>
 #include <QPushButton>
@@ -129,6 +130,11 @@ bool recipeValuesEqual(const upkun::domain::RecipeParameters& left, const upkun:
         && left.simulationQualityRate == right.simulationQualityRate;
 }
 
+QString simulatorExecutablePath()
+{
+    return QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("upkun-simulator.exe"));
+}
+
 } // namespace
 
 namespace upkun::app {
@@ -180,6 +186,17 @@ MainWindow::MainWindow(QWidget* parent)
 
     setupStorage();
     setupDeviceLink();
+}
+
+MainWindow::~MainWindow()
+{
+    if (m_simulatorProcess != nullptr && m_simulatorProcess->state() != QProcess::NotRunning) {
+        m_simulatorProcess->terminate();
+        if (!m_simulatorProcess->waitForFinished(1500)) {
+            m_simulatorProcess->kill();
+            m_simulatorProcess->waitForFinished(1000);
+        }
+    }
 }
 
 void MainWindow::handleNavigationChanged(int row)
@@ -457,16 +474,39 @@ void MainWindow::exportTrendCsv()
 
 void MainWindow::startSimulator()
 {
-    QString errorMessage;
-    if (!m_simulatedServer->start(QHostAddress::LocalHost, 1502, &errorMessage)) {
-        m_alarmLabel->setText(QStringLiteral("模拟器启动失败：%1").arg(errorMessage));
-        appendOperationLog(QStringLiteral("启动模拟器"), QStringLiteral("127.0.0.1:1502"), QStringLiteral("失败"), errorMessage);
+    const QString exePath = simulatorExecutablePath();
+    if (!QFileInfo::exists(exePath)) {
+        const QString message = QStringLiteral("未找到独立模拟器：%1").arg(exePath);
+        m_alarmLabel->setText(message);
+        appendOperationLog(QStringLiteral("启动模拟器"), QStringLiteral("127.0.0.1:1502"), QStringLiteral("失败"), message);
         refreshAlarmRecords();
         return;
     }
 
+    if (m_simulatorProcess->state() == QProcess::NotRunning) {
+        m_simulatorProcess->setProgram(exePath);
+        m_simulatorProcess->setArguments({QStringLiteral("--host"), QStringLiteral("127.0.0.1"), QStringLiteral("--port"), QStringLiteral("1502")});
+        m_simulatorProcess->setProcessChannelMode(QProcess::MergedChannels);
+        m_simulatorProcess->start();
+        if (!m_simulatorProcess->waitForStarted(3000)) {
+            const QString message = m_simulatorProcess->errorString();
+            m_alarmLabel->setText(QStringLiteral("模拟器启动失败：%1").arg(message));
+            appendOperationLog(QStringLiteral("启动模拟器"), QStringLiteral("127.0.0.1:1502"), QStringLiteral("失败"), message);
+            refreshAlarmRecords();
+            return;
+        }
+        if (m_simulatorProcess->waitForFinished(300)) {
+            const QString output = QString::fromLocal8Bit(m_simulatorProcess->readAll()).trimmed();
+            const QString message = output.isEmpty() ? m_simulatorProcess->errorString() : output;
+            m_alarmLabel->setText(QStringLiteral("模拟器启动失败：%1").arg(message));
+            appendOperationLog(QStringLiteral("启动模拟器"), QStringLiteral("127.0.0.1:1502"), QStringLiteral("失败"), message);
+            refreshAlarmRecords();
+            return;
+        }
+    }
+
     m_simulatorPage->setListening(true);
-    appendOperationLog(QStringLiteral("启动模拟器"), QStringLiteral("127.0.0.1:1502"), QStringLiteral("成功"), QStringLiteral("监听中"));
+    appendOperationLog(QStringLiteral("启动模拟器"), QStringLiteral("127.0.0.1:1502"), QStringLiteral("成功"), QStringLiteral("独立进程"));
     refreshAlarmRecords();
     upkun::domain::DeviceConnectionConfig config;
     m_deviceClient->connectToDevice(config);
@@ -475,7 +515,13 @@ void MainWindow::startSimulator()
 void MainWindow::stopSimulator()
 {
     m_deviceClient->disconnectFromDevice();
-    m_simulatedServer->stop();
+    if (m_simulatorProcess->state() != QProcess::NotRunning) {
+        m_simulatorProcess->terminate();
+        if (!m_simulatorProcess->waitForFinished(1500)) {
+            m_simulatorProcess->kill();
+            m_simulatorProcess->waitForFinished(1000);
+        }
+    }
     m_simulatorPage->setListening(false);
     appendOperationLog(QStringLiteral("停止模拟器"), QStringLiteral("127.0.0.1:1502"), QStringLiteral("成功"), QStringLiteral("已停止监听"));
     refreshAlarmRecords();
@@ -664,8 +710,8 @@ void MainWindow::setupStorage()
 
 void MainWindow::setupDeviceLink()
 {
-    // 第一阶段默认启动内置模拟器；M14 拆分后这里会变成连接外部模拟器或真实 PLC。
-    m_simulatedServer = new upkun::simulator::SimulatedModbusServer(this);
+    // M14 后模拟器作为独立进程运行，上位机只通过 Modbus TCP 协议连接它。
+    m_simulatorProcess = new QProcess(this);
     m_deviceClient = new upkun::device::ModbusTcpClient(this);
 
     connect(m_deviceClient, &upkun::device::ModbusTcpClient::connectionChanged,
@@ -676,27 +722,32 @@ void MainWindow::setupDeviceLink()
         this, &MainWindow::handleCommandFinished);
     connect(m_monitorPage, &upkun::ui::MonitorPage::commandRequested,
         m_deviceClient, &upkun::device::ModbusTcpClient::sendCommand);
+    connect(m_simulatorProcess, &QProcess::finished, this, [this](int exitCode, QProcess::ExitStatus exitStatus) {
+        Q_UNUSED(exitCode)
+        Q_UNUSED(exitStatus)
+        m_simulatorPage->setListening(false);
+    });
 
     connect(m_simulatorPage, &upkun::ui::SimulatorPage::startSimulatorRequested,
         this, &MainWindow::startSimulator);
     connect(m_simulatorPage, &upkun::ui::SimulatorPage::stopSimulatorRequested,
         this, &MainWindow::stopSimulator);
     connect(m_simulatorPage, &upkun::ui::SimulatorPage::faultRequested,
-        m_simulatedServer, &upkun::simulator::SimulatedModbusServer::triggerAlarm);
+        m_deviceClient, &upkun::device::ModbusTcpClient::injectFault);
     connect(m_simulatorPage, &upkun::ui::SimulatorPage::faultRequested,
         this, [this](int alarmCode) {
-            appendOperationLog(QStringLiteral("触发模拟故障"), QString::number(alarmCode), QStringLiteral("成功"), QStringLiteral("模拟器页面"));
+            appendOperationLog(QStringLiteral("触发模拟故障"), QString::number(alarmCode), QStringLiteral("成功"), QStringLiteral("Modbus TCP"));
             refreshAlarmRecords();
         });
     connect(m_simulatorPage, &upkun::ui::SimulatorPage::clearFaultRequested,
-        m_simulatedServer, &upkun::simulator::SimulatedModbusServer::clearAlarm);
+        m_deviceClient, [this] {
+            m_deviceClient->sendCommand(upkun::domain::DeviceCommand::Reset);
+        });
     connect(m_simulatorPage, &upkun::ui::SimulatorPage::clearFaultRequested,
         this, [this] {
-            appendOperationLog(QStringLiteral("清除模拟故障"), QStringLiteral("模拟器"), QStringLiteral("成功"), QStringLiteral("模拟器页面"));
+            appendOperationLog(QStringLiteral("清除模拟故障"), QStringLiteral("模拟器"), QStringLiteral("成功"), QStringLiteral("Modbus TCP"));
             refreshAlarmRecords();
         });
-    connect(m_simulatedServer, &upkun::simulator::SimulatedModbusServer::listeningChanged,
-        m_simulatorPage, &upkun::ui::SimulatorPage::setListening);
 
     startSimulator();
 }

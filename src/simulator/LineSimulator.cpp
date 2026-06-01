@@ -225,6 +225,7 @@ void LineSimulator::resetData()
     m_holdingRegisters[upkun::device::modbus::toHoldingRegisterOffset(upkun::device::modbus::HoldingRegisters::BatchTargetCount)] = 1000;
     m_holdingRegisters[upkun::device::modbus::toHoldingRegisterOffset(upkun::device::modbus::HoldingRegisters::AlarmDelay)] = 500;
     m_holdingRegisters[upkun::device::modbus::toHoldingRegisterOffset(upkun::device::modbus::HoldingRegisters::SimQualityRate)] = 98;
+    m_holdingRegisters[upkun::device::modbus::toHoldingRegisterOffset(upkun::device::modbus::HoldingRegisters::SimFaultCode)] = 5001;
 
     updateInputs();
     updateInputRegisters();
@@ -261,7 +262,10 @@ void LineSimulator::handleCommand(int offset)
         // 剔除测试不立即报警，而是让下一件产品走一次不良/剔除流程。
         m_forceRejectOnce = true;
     } else if (offset == toCoilOffset(Coils::CmdSimFault)) {
-        triggerAlarm(5001);
+        const int faultCode = holdingValue(
+            upkun::device::modbus::toHoldingRegisterOffset(upkun::device::modbus::HoldingRegisters::SimFaultCode),
+            5001);
+        triggerAlarm(faultCode > 0 ? faultCode : 5001);
     }
 }
 
