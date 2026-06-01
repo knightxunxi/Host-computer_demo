@@ -29,6 +29,7 @@ class ModbusTcpClient;
 namespace upkun::ui {
 class AlarmPage;
 class BatchPage;
+class DiagnosticsPage;
 class MonitorPage;
 class RecipePage;
 class SimulatorPage;
@@ -48,6 +49,7 @@ private slots:
     void handleNavigationChanged(int row);
     void handleSnapshotUpdated(const upkun::domain::DeviceSnapshot& snapshot);
     void handleConnectionChanged(upkun::domain::ConnectionState state);
+    void handleDiagnosticsUpdated(const upkun::domain::CommunicationDiagnostics& diagnostics);
     void handleCommandFinished(upkun::domain::DeviceCommand command, bool ok, const QString& message);
     void refreshAlarmRecords();
     void refreshBatchRecords();
@@ -97,6 +99,7 @@ private:
     upkun::ui::RecipePage* m_recipePage = nullptr;
     upkun::ui::TrendPage* m_trendPage = nullptr;
     upkun::ui::SimulatorPage* m_simulatorPage = nullptr;
+    upkun::ui::DiagnosticsPage* m_diagnosticsPage = nullptr;
     QProcess* m_simulatorProcess = nullptr;
     upkun::device::ModbusTcpClient* m_deviceClient = nullptr;
     upkun::storage::DatabaseManager m_databaseManager;

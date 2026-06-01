@@ -2,6 +2,8 @@
 
 #include "device/ModbusPointMap.h"
 
+#include <algorithm>
+
 namespace {
 
 // Modbus TCP 使用大端序，Qt 的 QByteArray 按字节保存，这里集中处理 16 位值。
@@ -28,6 +30,15 @@ bool bitAt(const QByteArray& data, int bitIndex)
     return (static_cast<quint8>(data.at(byteIndex)) & (1 << offset)) != 0;
 }
 
+int communicationQuality(quint64 responses, quint64 timeouts, quint64 errors)
+{
+    const quint64 completed = responses + timeouts + errors;
+    if (completed == 0) {
+        return 100;
+    }
+    return static_cast<int>((responses * 100) / completed);
+}
+
 } // namespace
 
 namespace upkun::device {
@@ -45,22 +56,30 @@ ModbusTcpClient::ModbusTcpClient(QObject* parent)
 
     m_reconnectTimer.setSingleShot(true);
     connect(&m_reconnectTimer, &QTimer::timeout, this, &ModbusTcpClient::reconnect);
+
+    m_timeoutTimer.setInterval(250);
+    connect(&m_timeoutTimer, &QTimer::timeout, this, &ModbusTcpClient::checkTimeouts);
 }
 
 void ModbusTcpClient::connectToDevice(const upkun::domain::DeviceConnectionConfig& config)
 {
     m_config = config;
     m_pollTimer.setInterval(m_config.statusPollMs);
+    m_diagnostics = {};
+    m_diagnostics.endpoint = QStringLiteral("%1:%2").arg(m_config.host).arg(m_config.port);
     updateConnectionState(upkun::domain::ConnectionState::Connecting);
     m_socket.abort();
     m_socket.connectToHost(m_config.host, m_config.port);
+    m_timeoutTimer.start();
 }
 
 void ModbusTcpClient::disconnectFromDevice()
 {
     m_reconnectTimer.stop();
     m_pollTimer.stop();
+    m_timeoutTimer.stop();
     m_pending.clear();
+    m_diagnostics.pendingRequests = 0;
     m_socket.disconnectFromHost();
     updateConnectionState(upkun::domain::ConnectionState::Disconnected);
 }
@@ -161,8 +180,12 @@ void ModbusTcpClient::poll()
 void ModbusTcpClient::handleConnected()
 {
     m_pending.clear();
+    m_diagnostics.pendingRequests = 0;
+    m_diagnostics.consecutiveTimeouts = 0;
+    m_diagnostics.lastError.clear();
     m_buffer.clear();
     updateConnectionState(upkun::domain::ConnectionState::Connected);
+    m_timeoutTimer.start();
     m_pollTimer.start();
     poll();
 }
@@ -170,15 +193,22 @@ void ModbusTcpClient::handleConnected()
 void ModbusTcpClient::handleDisconnected()
 {
     m_pollTimer.stop();
+    m_pending.clear();
+    m_diagnostics.pendingRequests = 0;
     if (m_connectionState != upkun::domain::ConnectionState::Disconnected) {
+        ++m_diagnostics.reconnectCount;
         updateConnectionState(upkun::domain::ConnectionState::Reconnecting);
         m_reconnectTimer.start(m_config.reconnectMs);
+    } else {
+        publishDiagnostics();
     }
 }
 
 void ModbusTcpClient::handleError(QAbstractSocket::SocketError socketError)
 {
     Q_UNUSED(socketError)
+    recordError(m_socket.errorString());
+    updateConnectionState(upkun::domain::ConnectionState::Error);
     emit errorOccurred({1, m_socket.errorString()});
 }
 
@@ -205,8 +235,52 @@ void ModbusTcpClient::reconnect()
     if (m_connectionState == upkun::domain::ConnectionState::Disconnected) {
         return;
     }
+    updateConnectionState(upkun::domain::ConnectionState::Reconnecting);
     m_socket.abort();
     m_socket.connectToHost(m_config.host, m_config.port);
+}
+
+void ModbusTcpClient::checkTimeouts()
+{
+    if (m_pending.isEmpty()) {
+        return;
+    }
+
+    const QDateTime now = QDateTime::currentDateTime();
+    QVector<quint16> timedOutTransactions;
+    timedOutTransactions.reserve(m_pending.size());
+
+    for (auto it = m_pending.cbegin(); it != m_pending.cend(); ++it) {
+        if (it.value().sentAt.msecsTo(now) >= m_config.timeoutMs) {
+            timedOutTransactions.append(it.key());
+        }
+    }
+
+    if (timedOutTransactions.isEmpty()) {
+        return;
+    }
+
+    for (const quint16 transactionId : timedOutTransactions) {
+        const PendingRequest request = m_pending.take(transactionId);
+        if (request.kind == RequestKind::WriteCommand) {
+            emit commandFinished(request.command, false, QStringLiteral("Modbus 请求超时"));
+        }
+    }
+
+    m_diagnostics.timeoutCount += static_cast<quint64>(timedOutTransactions.size());
+    ++m_diagnostics.consecutiveTimeouts;
+    m_diagnostics.pendingRequests = m_pending.size();
+    m_diagnostics.lastError = QStringLiteral("Modbus 请求超时：%1 个请求未响应").arg(timedOutTransactions.size());
+    m_diagnostics.qualityPercent = communicationQuality(
+        m_diagnostics.totalResponses,
+        m_diagnostics.timeoutCount,
+        m_diagnostics.errorCount);
+    publishDiagnostics();
+
+    if (m_diagnostics.consecutiveTimeouts >= 2 && m_socket.state() == QAbstractSocket::ConnectedState) {
+        m_pollTimer.stop();
+        m_socket.abort();
+    }
 }
 
 void ModbusTcpClient::sendReadRequest(quint8 function, quint16 address, quint16 quantity, RequestKind kind)
@@ -214,7 +288,10 @@ void ModbusTcpClient::sendReadRequest(quint8 function, quint16 address, quint16 
     QByteArray payload;
     appendU16(&payload, address);
     appendU16(&payload, quantity);
-    sendAdu(function, payload, {kind, upkun::domain::DeviceCommand::Start});
+    PendingRequest request;
+    request.kind = kind;
+    request.command = upkun::domain::DeviceCommand::Start;
+    sendAdu(function, payload, request);
 }
 
 void ModbusTcpClient::sendWriteSingleCoil(quint16 address, bool value, upkun::domain::DeviceCommand command)
@@ -222,7 +299,10 @@ void ModbusTcpClient::sendWriteSingleCoil(quint16 address, bool value, upkun::do
     QByteArray payload;
     appendU16(&payload, address);
     appendU16(&payload, value ? 0xff00 : 0x0000);
-    sendAdu(0x05, payload, {RequestKind::WriteCommand, command});
+    PendingRequest request;
+    request.kind = RequestKind::WriteCommand;
+    request.command = command;
+    sendAdu(0x05, payload, request);
 }
 
 void ModbusTcpClient::sendWriteSingleRegister(quint16 address, quint16 value)
@@ -230,7 +310,10 @@ void ModbusTcpClient::sendWriteSingleRegister(quint16 address, quint16 value)
     QByteArray payload;
     appendU16(&payload, address);
     appendU16(&payload, value);
-    sendAdu(0x06, payload, {RequestKind::WriteRegister, upkun::domain::DeviceCommand::SimFault});
+    PendingRequest request;
+    request.kind = RequestKind::WriteRegister;
+    request.command = upkun::domain::DeviceCommand::SimFault;
+    sendAdu(0x06, payload, request);
 }
 
 void ModbusTcpClient::sendWriteMultipleRegisters(quint16 address, const QVector<quint16>& values)
@@ -242,7 +325,10 @@ void ModbusTcpClient::sendWriteMultipleRegisters(quint16 address, const QVector<
     for (const quint16 value : values) {
         appendU16(&payload, value);
     }
-    sendAdu(0x10, payload, {RequestKind::WriteRecipe, upkun::domain::DeviceCommand::Start});
+    PendingRequest request;
+    request.kind = RequestKind::WriteRecipe;
+    request.command = upkun::domain::DeviceCommand::Start;
+    sendAdu(0x10, payload, request);
 }
 
 void ModbusTcpClient::sendAdu(quint8 function, const QByteArray& payload, PendingRequest request)
@@ -257,7 +343,16 @@ void ModbusTcpClient::sendAdu(quint8 function, const QByteArray& payload, Pendin
     adu.append(payload);
 
     // transactionId 用来把异步响应匹配回当初的读写请求。
+    request.sentAt = QDateTime::currentDateTime();
     m_pending.insert(transactionId, request);
+    ++m_diagnostics.totalRequests;
+    m_diagnostics.lastRequestAt = request.sentAt;
+    m_diagnostics.pendingRequests = m_pending.size();
+    m_diagnostics.qualityPercent = communicationQuality(
+        m_diagnostics.totalResponses,
+        m_diagnostics.timeoutCount,
+        m_diagnostics.errorCount);
+    publishDiagnostics();
     m_socket.write(adu);
 }
 
@@ -268,11 +363,18 @@ void ModbusTcpClient::processResponse(const QByteArray& adu)
     }
 
     const quint16 transactionId = readU16(adu, 0);
+    if (!m_pending.contains(transactionId)) {
+        recordError(QStringLiteral("收到未知事务响应：%1").arg(transactionId));
+        return;
+    }
+
     const PendingRequest request = m_pending.take(transactionId);
+    recordResponse(static_cast<int>(std::max<qint64>(0, request.sentAt.msecsTo(QDateTime::currentDateTime()))));
     const QByteArray pdu = adu.mid(7);
     const quint8 function = static_cast<quint8>(pdu.at(0));
 
     if ((function & 0x80) != 0) {
+        recordError(QStringLiteral("Modbus 异常响应"));
         if (request.kind == RequestKind::WriteCommand) {
             emit commandFinished(request.command, false, QStringLiteral("Modbus 异常响应"));
         }
@@ -375,7 +477,43 @@ void ModbusTcpClient::updateConnectionState(upkun::domain::ConnectionState state
         return;
     }
     m_connectionState = state;
+    m_diagnostics.state = state;
+    if (m_diagnostics.endpoint.isEmpty()) {
+        m_diagnostics.endpoint = QStringLiteral("%1:%2").arg(m_config.host).arg(m_config.port);
+    }
     emit connectionChanged(state);
+    publishDiagnostics();
+}
+
+void ModbusTcpClient::recordError(const QString& message)
+{
+    ++m_diagnostics.errorCount;
+    m_diagnostics.lastError = message;
+    m_diagnostics.qualityPercent = communicationQuality(
+        m_diagnostics.totalResponses,
+        m_diagnostics.timeoutCount,
+        m_diagnostics.errorCount);
+    publishDiagnostics();
+}
+
+void ModbusTcpClient::recordResponse(int roundTripMs)
+{
+    ++m_diagnostics.totalResponses;
+    m_diagnostics.consecutiveTimeouts = 0;
+    m_diagnostics.lastRoundTripMs = roundTripMs;
+    m_diagnostics.lastResponseAt = QDateTime::currentDateTime();
+    m_diagnostics.pendingRequests = m_pending.size();
+    m_diagnostics.qualityPercent = communicationQuality(
+        m_diagnostics.totalResponses,
+        m_diagnostics.timeoutCount,
+        m_diagnostics.errorCount);
+    publishDiagnostics();
+}
+
+void ModbusTcpClient::publishDiagnostics()
+{
+    m_diagnostics.pendingRequests = m_pending.size();
+    emit diagnosticsUpdated(m_diagnostics);
 }
 
 } // namespace upkun::device

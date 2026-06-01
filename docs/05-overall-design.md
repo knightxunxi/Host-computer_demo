@@ -159,6 +159,7 @@ public slots:
 signals:
     void connectionChanged(ConnectionState state);
     void snapshotUpdated(DeviceSnapshot snapshot);
+    void diagnosticsUpdated(CommunicationDiagnostics diagnostics);
     void commandFinished(DeviceCommand command, bool ok, QString message);
     void errorOccurred(DeviceError error);
 };
@@ -167,6 +168,7 @@ signals:
 MVP 实现：
 
 - `ModbusTcpClient`：使用 Qt Network 读写 Modbus TCP 点位。
+- `CommunicationDiagnostics`：统计请求、响应、超时、错误、重连和最近响应耗时，供诊断页显示。
 - `SimulatedModbusServer`：在本机监听默认端口，提供虚拟 PLC 点位。
 - 最小功能码：读线圈、读离散输入、读保持寄存器、读输入寄存器、写单线圈、写单寄存器、写多寄存器。
 

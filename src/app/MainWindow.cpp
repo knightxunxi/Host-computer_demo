@@ -4,6 +4,7 @@
 #include "ui/dialogs/LoginDialog.h"
 #include "ui/pages/AlarmPage.h"
 #include "ui/pages/BatchPage.h"
+#include "ui/pages/DiagnosticsPage.h"
 #include "ui/pages/MonitorPage.h"
 #include "ui/pages/RecipePage.h"
 #include "ui/pages/SimulatorPage.h"
@@ -166,12 +167,14 @@ MainWindow::MainWindow(QWidget* parent)
     m_recipePage = new upkun::ui::RecipePage(m_pages);
     m_trendPage = new upkun::ui::TrendPage(m_pages);
     m_simulatorPage = new upkun::ui::SimulatorPage(m_pages);
+    m_diagnosticsPage = new upkun::ui::DiagnosticsPage(m_pages);
     m_pages->addWidget(m_monitorPage);
     m_pages->addWidget(m_batchPage);
     m_pages->addWidget(m_alarmPage);
     m_pages->addWidget(m_recipePage);
     m_pages->addWidget(m_trendPage);
     m_pages->addWidget(m_simulatorPage);
+    m_pages->addWidget(m_diagnosticsPage);
     bodyLayout->addWidget(m_pages, 1);
 
     rootLayout->addWidget(body, 1);
@@ -236,6 +239,16 @@ void MainWindow::handleSnapshotUpdated(const upkun::domain::DeviceSnapshot& snap
 void MainWindow::handleConnectionChanged(upkun::domain::ConnectionState state)
 {
     m_connectionLabel->setText(QStringLiteral("PLC通信：%1").arg(connectionStateText(state)));
+}
+
+void MainWindow::handleDiagnosticsUpdated(const upkun::domain::CommunicationDiagnostics& diagnostics)
+{
+    m_connectionLabel->setText(QStringLiteral("PLC通信：%1  质量：%2%")
+            .arg(connectionStateText(diagnostics.state))
+            .arg(diagnostics.qualityPercent));
+    if (m_diagnosticsPage != nullptr) {
+        m_diagnosticsPage->updateDiagnostics(diagnostics);
+    }
 }
 
 void MainWindow::handleCommandFinished(upkun::domain::DeviceCommand command, bool ok, const QString& message)
@@ -623,6 +636,7 @@ QWidget* MainWindow::createNavigation()
     m_navigation->addItem(new QListWidgetItem(QStringLiteral("参数/配方")));
     m_navigation->addItem(new QListWidgetItem(QStringLiteral("趋势曲线")));
     m_navigation->addItem(new QListWidgetItem(QStringLiteral("模拟器")));
+    m_navigation->addItem(new QListWidgetItem(QStringLiteral("通信诊断")));
     layout->addWidget(m_navigation);
 
     return frame;
@@ -718,6 +732,8 @@ void MainWindow::setupDeviceLink()
         this, &MainWindow::handleConnectionChanged);
     connect(m_deviceClient, &upkun::device::ModbusTcpClient::snapshotUpdated,
         this, &MainWindow::handleSnapshotUpdated);
+    connect(m_deviceClient, &upkun::device::ModbusTcpClient::diagnosticsUpdated,
+        this, &MainWindow::handleDiagnosticsUpdated);
     connect(m_deviceClient, &upkun::device::ModbusTcpClient::commandFinished,
         this, &MainWindow::handleCommandFinished);
     connect(m_monitorPage, &upkun::ui::MonitorPage::commandRequested,

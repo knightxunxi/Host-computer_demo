@@ -34,6 +34,8 @@ qt_add_executable(UpkunHmi WIN32
     src/ui/pages/TrendPage.cpp
     src/ui/pages/SimulatorPage.h
     src/ui/pages/SimulatorPage.cpp
+    src/ui/pages/DiagnosticsPage.h
+    src/ui/pages/DiagnosticsPage.cpp
     src/ui/dialogs/LoginDialog.h
     src/ui/dialogs/LoginDialog.cpp
     src/domain/DeviceTypes.h

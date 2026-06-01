@@ -3,6 +3,7 @@
 #include "device/IDeviceClient.h"
 
 #include <QByteArray>
+#include <QDateTime>
 #include <QHash>
 #include <QTimer>
 #include <QTcpSocket>
@@ -29,6 +30,7 @@ private slots:
     void handleError(QAbstractSocket::SocketError socketError);
     void handleReadyRead();
     void reconnect();
+    void checkTimeouts();
 
 private:
     enum class RequestKind {
@@ -42,6 +44,7 @@ private:
     struct PendingRequest {
         RequestKind kind = RequestKind::ReadInputRegisters;
         upkun::domain::DeviceCommand command = upkun::domain::DeviceCommand::Start;
+        QDateTime sentAt;
     };
 
     void sendReadRequest(quint8 function, quint16 address, quint16 quantity, RequestKind kind);
@@ -54,14 +57,19 @@ private:
     void decodeInputRegisters(const QByteArray& pdu);
     quint16 nextTransactionId();
     void updateConnectionState(upkun::domain::ConnectionState state);
+    void recordError(const QString& message);
+    void recordResponse(int roundTripMs);
+    void publishDiagnostics();
 
     QTcpSocket m_socket;
     QTimer m_pollTimer;
     QTimer m_reconnectTimer;
+    QTimer m_timeoutTimer;
     QByteArray m_buffer;
     QHash<quint16, PendingRequest> m_pending;
     upkun::domain::DeviceConnectionConfig m_config;
     upkun::domain::DeviceSnapshot m_snapshot;
+    upkun::domain::CommunicationDiagnostics m_diagnostics;
     quint16 m_transactionId = 0;
     upkun::domain::ConnectionState m_connectionState = upkun::domain::ConnectionState::Disconnected;
 };

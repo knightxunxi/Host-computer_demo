@@ -28,6 +28,7 @@ signals:
     void snapshotUpdated(upkun::domain::DeviceSnapshot snapshot);
     void commandFinished(upkun::domain::DeviceCommand command, bool ok, QString message);
     void errorOccurred(upkun::domain::DeviceError error);
+    void diagnosticsUpdated(upkun::domain::CommunicationDiagnostics diagnostics);
 };
 
 } // namespace upkun::device

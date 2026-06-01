@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QDateTime>
 #include <QtGlobal>
 #include <QString>
 
@@ -120,6 +121,23 @@ struct DeviceConnectionConfig {
 struct DeviceError {
     int code = 0;
     QString message;
+};
+
+struct CommunicationDiagnostics {
+    ConnectionState state = ConnectionState::Disconnected;
+    QString endpoint;
+    int pendingRequests = 0;
+    quint64 totalRequests = 0;
+    quint64 totalResponses = 0;
+    quint64 timeoutCount = 0;
+    quint64 errorCount = 0;
+    quint64 reconnectCount = 0;
+    int consecutiveTimeouts = 0;
+    int lastRoundTripMs = 0;
+    int qualityPercent = 100;
+    QDateTime lastRequestAt;
+    QDateTime lastResponseAt;
+    QString lastError;
 };
 
 } // namespace upkun::domain
