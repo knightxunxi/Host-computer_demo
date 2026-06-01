@@ -17,6 +17,7 @@ set(CMAKE_AUTOUIC ON)
 find_package(Qt6 REQUIRED COMPONENTS Core Widgets Network Sql Charts)
 
 qt_standard_project_setup()
+enable_testing()
 
 qt_add_executable(UpkunHmi WIN32
     src/app/main.cpp
@@ -103,8 +104,35 @@ target_link_libraries(UpkunSimulator PRIVATE
     Qt6::Network
 )
 
+qt_add_executable(UpkunRegressionTests
+    tests/regression_tests.cpp
+    src/simulator/LineSimulator.h
+    src/simulator/LineSimulator.cpp
+    src/simulator/SimulatedModbusServer.h
+    src/simulator/SimulatedModbusServer.cpp
+    src/device/ModbusPointMap.h
+    src/domain/DeviceTypes.h
+    src/storage/DatabaseManager.h
+    src/storage/DatabaseManager.cpp
+)
+
+target_include_directories(UpkunRegressionTests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_link_libraries(UpkunRegressionTests PRIVATE
+    Qt6::Core
+    Qt6::Network
+    Qt6::Sql
+)
+
+add_test(NAME upkun-regression COMMAND UpkunRegressionTests)
+set_tests_properties(upkun-regression PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+)
+
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    foreach(target_name UpkunHmi UpkunSimulator)
+    foreach(target_name UpkunHmi UpkunSimulator UpkunRegressionTests)
         target_compile_options(${target_name} PRIVATE
             -Wall
             -Wextra
