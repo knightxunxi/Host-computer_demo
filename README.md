@@ -6,7 +6,7 @@
 
 - 学习目标：通过一个完整项目理解工业上位机从需求到交付的开发流程。
 - 业务场景：模拟一条小型包装产线，上位机负责设备监控、控制操作、报警处理、生产记录和配方管理。
-- 当前阶段：M17 部署增强已进入实现，支持版本号、配置读取、文件日志、发布目录和发布检查清单。
+- 当前阶段：M18 协议扩展已进入实现，在 Modbus TCP 基础上新增 Modbus RTU 帧编码和 `IDeviceClient` 适配骨架。
 - 后续设备接入：没有真实 PLC 前，默认使用仓库内置虚拟包装线/PLC 模拟器，并通过协议模拟学习 TCP Socket、Modbus TCP、串口、Modbus RTU、OPC UA 和 Snap7/S7。
 
 ## 技术栈规划
@@ -46,6 +46,7 @@
 - [M15 通信诊断说明](docs/18-communication-diagnostics.md)
 - [M16 测试增强说明](docs/19-test-enhancement.md)
 - [M17 部署增强说明](docs/20-deployment-enhancement.md)
+- [M18 协议扩展说明](docs/21-protocol-extension.md)
 
 ## 当前实现能力
 
@@ -67,6 +68,7 @@
 - M15 新增通信诊断页，显示连接质量、请求响应、超时、错误、重连和最近耗时。
 - M16 新增 CTest 回归测试，覆盖点位映射、SQLite 表初始化和模拟器 Modbus 故障注入。
 - M17 新增配置读取、版本号显示、文件日志、发布目录数据/日志子目录和发布检查清单。
+- M18 新增 Modbus RTU CRC/帧编码、RTU 客户端适配骨架和配置项，默认仍使用 Modbus TCP。
 
 ## 构建运行
 

@@ -53,6 +53,10 @@ qt_add_executable(UpkunHmi WIN32
     src/device/IDeviceClient.h
     src/device/ModbusTcpClient.h
     src/device/ModbusTcpClient.cpp
+    src/device/ModbusRtuClient.h
+    src/device/ModbusRtuClient.cpp
+    src/device/ModbusRtuCodec.h
+    src/device/ModbusRtuCodec.cpp
     src/device/ModbusPointMap.h
     src/storage/DatabaseManager.h
     src/storage/DatabaseManager.cpp
@@ -115,6 +119,8 @@ target_compile_definitions(UpkunSimulator PRIVATE
 
 qt_add_executable(UpkunRegressionTests
     tests/regression_tests.cpp
+    src/device/ModbusRtuCodec.h
+    src/device/ModbusRtuCodec.cpp
     src/simulator/LineSimulator.h
     src/simulator/LineSimulator.cpp
     src/simulator/SimulatedModbusServer.h

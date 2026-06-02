@@ -1,5 +1,7 @@
 #include "app/MainWindow.h"
 
+#include "device/IDeviceClient.h"
+#include "device/ModbusRtuClient.h"
 #include "device/ModbusTcpClient.h"
 #include "infrastructure/Logger.h"
 #include "ui/dialogs/LoginDialog.h"
@@ -139,6 +141,9 @@ QString simulatorExecutablePath()
 
 QString endpointText(const upkun::domain::DeviceConnectionConfig& config)
 {
+    if (config.mode == QStringLiteral("modbus_rtu")) {
+        return QStringLiteral("%1 %2bps slave %3").arg(config.serialPort).arg(config.baudRate).arg(config.slaveId);
+    }
     return QStringLiteral("%1:%2").arg(config.host).arg(config.port);
 }
 
@@ -500,6 +505,13 @@ void MainWindow::exportTrendCsv()
 
 void MainWindow::startSimulator()
 {
+    if (m_config.device.mode == QStringLiteral("modbus_rtu")) {
+        m_simulatorPage->setListening(false);
+        appendOperationLog(QStringLiteral("启动模拟器"), endpointText(m_config.device), QStringLiteral("跳过"), QStringLiteral("Modbus RTU 模式不启动 TCP 模拟器"));
+        m_deviceClient->connectToDevice(m_config.device);
+        return;
+    }
+
     const QString exePath = simulatorExecutablePath();
     const QString endpoint = endpointText(m_config.device);
     if (!QFileInfo::exists(exePath)) {
@@ -740,19 +752,23 @@ void MainWindow::setupDeviceLink()
 {
     // M14 后模拟器作为独立进程运行，上位机只通过 Modbus TCP 协议连接它。
     m_simulatorProcess = new QProcess(this);
-    m_deviceClient = new upkun::device::ModbusTcpClient(this);
+    if (m_config.device.mode == QStringLiteral("modbus_rtu")) {
+        m_deviceClient = new upkun::device::ModbusRtuClient(this);
+    } else {
+        m_deviceClient = new upkun::device::ModbusTcpClient(this);
+    }
     m_simulatorPage->setEndpoint(endpointText(m_config.device));
 
-    connect(m_deviceClient, &upkun::device::ModbusTcpClient::connectionChanged,
+    connect(m_deviceClient, &upkun::device::IDeviceClient::connectionChanged,
         this, &MainWindow::handleConnectionChanged);
-    connect(m_deviceClient, &upkun::device::ModbusTcpClient::snapshotUpdated,
+    connect(m_deviceClient, &upkun::device::IDeviceClient::snapshotUpdated,
         this, &MainWindow::handleSnapshotUpdated);
-    connect(m_deviceClient, &upkun::device::ModbusTcpClient::diagnosticsUpdated,
+    connect(m_deviceClient, &upkun::device::IDeviceClient::diagnosticsUpdated,
         this, &MainWindow::handleDiagnosticsUpdated);
-    connect(m_deviceClient, &upkun::device::ModbusTcpClient::commandFinished,
+    connect(m_deviceClient, &upkun::device::IDeviceClient::commandFinished,
         this, &MainWindow::handleCommandFinished);
     connect(m_monitorPage, &upkun::ui::MonitorPage::commandRequested,
-        m_deviceClient, &upkun::device::ModbusTcpClient::sendCommand);
+        m_deviceClient, &upkun::device::IDeviceClient::sendCommand);
     connect(m_simulatorProcess, &QProcess::finished, this, [this](int exitCode, QProcess::ExitStatus exitStatus) {
         Q_UNUSED(exitCode)
         Q_UNUSED(exitStatus)
@@ -764,7 +780,13 @@ void MainWindow::setupDeviceLink()
     connect(m_simulatorPage, &upkun::ui::SimulatorPage::stopSimulatorRequested,
         this, &MainWindow::stopSimulator);
     connect(m_simulatorPage, &upkun::ui::SimulatorPage::faultRequested,
-        m_deviceClient, &upkun::device::ModbusTcpClient::injectFault);
+        this, [this](int alarmCode) {
+            if (auto* tcpClient = qobject_cast<upkun::device::ModbusTcpClient*>(m_deviceClient)) {
+                tcpClient->injectFault(alarmCode);
+            } else {
+                m_deviceClient->sendCommand(upkun::domain::DeviceCommand::SimFault);
+            }
+        });
     connect(m_simulatorPage, &upkun::ui::SimulatorPage::faultRequested,
         this, [this](int alarmCode) {
             appendOperationLog(QStringLiteral("触发模拟故障"), QString::number(alarmCode), QStringLiteral("成功"), QStringLiteral("Modbus TCP"));

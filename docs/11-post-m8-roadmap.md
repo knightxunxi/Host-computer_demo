@@ -134,3 +134,15 @@ M17 先补部署交付基础能力：
 5. 启动时初始化 `logs/app-yyyyMMdd.log` 文件日志。
 6. 打包目录预创建 `data/` 和 `logs/`，并复制发布检查清单。
 7. 暂不做安装向导和自动升级，先保持 portable 发布包。
+
+## 13. M18 细化任务
+
+M18 先扩展一个最贴近当前点位模型的协议方向：Modbus RTU。
+
+1. 新增 `ModbusRtuCodec`，实现 RTU CRC16、CRC 追加和 CRC 校验。
+2. 支持生成读保持寄存器、读输入寄存器、写单线圈和写单保持寄存器 RTU 帧。
+3. 新增 `ModbusRtuClient`，实现与 `ModbusTcpClient` 相同的 `IDeviceClient` 接口。
+4. 配置文件增加 `mode`、`serial_port`、`baud_rate` 和 `slave_id`，默认仍为 `modbus_tcp`。
+5. 主窗口根据配置创建 TCP 或 RTU 客户端；RTU 当前提供帧编码和接口骨架，未启用真实串口传输。
+6. 回归测试增加 RTU 典型帧 CRC 校验，防止协议编码被破坏。
+7. 后续如安装 QtSerialPort，可在 `ModbusRtuClient` 内补真实串口收发，不影响 UI 和业务层接口。

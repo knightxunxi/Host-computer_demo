@@ -110,8 +110,12 @@ struct DeviceSnapshot {
 };
 
 struct DeviceConnectionConfig {
+    QString mode = QStringLiteral("modbus_tcp");
     QString host = QStringLiteral("127.0.0.1");
     quint16 port = 1502;
+    QString serialPort = QStringLiteral("COM1");
+    int baudRate = 9600;
+    int slaveId = 1;
     int statusPollMs = 500;
     int processPollMs = 1000;
     int timeoutMs = 2000;

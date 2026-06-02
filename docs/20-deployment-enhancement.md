@@ -103,4 +103,4 @@ dist/upkun-hmi/RELEASE-CHECKLIST.md
 
 ## 7. 后续进入 M18
 
-M18 会在现有 Modbus TCP 基础上扩展一个真实设备协议方向。学习优先级建议选择 Modbus RTU，因为它和当前点位模型最接近，也方便用虚拟串口或协议文档继续学习。
+M18 已在现有 Modbus TCP 基础上扩展 Modbus RTU 帧编码和客户端适配骨架。后续如安装 QtSerialPort，可继续补真实串口收发。

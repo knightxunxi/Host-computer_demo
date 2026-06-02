@@ -48,8 +48,9 @@ Smoke test passed.
 1. CMake 配置和构建成功。
 2. CTest 运行 upkun-regression。
 3. 点位地址转换符合点位表。
-4. SQLite 初始化能创建核心业务表。
-5. 独立模拟器支持 Modbus TCP 写故障码、触发故障并读回报警码。
+4. Modbus RTU CRC 和典型请求帧符合预期。
+5. SQLite 初始化能创建核心业务表。
+6. 独立模拟器支持 Modbus TCP 写故障码、触发故障并读回报警码。
 ```
 
 通过标志：

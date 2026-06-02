@@ -24,7 +24,7 @@
 #include <optional>
 
 namespace upkun::device {
-class ModbusTcpClient;
+class IDeviceClient;
 }
 
 namespace upkun::ui {
@@ -102,7 +102,7 @@ private:
     upkun::ui::SimulatorPage* m_simulatorPage = nullptr;
     upkun::ui::DiagnosticsPage* m_diagnosticsPage = nullptr;
     QProcess* m_simulatorProcess = nullptr;
-    upkun::device::ModbusTcpClient* m_deviceClient = nullptr;
+    upkun::device::IDeviceClient* m_deviceClient = nullptr;
     upkun::infrastructure::AppConfig m_config;
     upkun::storage::DatabaseManager m_databaseManager;
     upkun::storage::AlarmRepository m_alarmRepository;

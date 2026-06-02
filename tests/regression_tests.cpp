@@ -1,4 +1,5 @@
 #include "device/ModbusPointMap.h"
+#include "device/ModbusRtuCodec.h"
 #include "simulator/SimulatedModbusServer.h"
 #include "storage/DatabaseManager.h"
 
@@ -140,6 +141,14 @@ bool testDatabaseSchema()
     return ok;
 }
 
+bool testModbusRtuCodec()
+{
+    const QByteArray readHolding = upkun::device::modbus_rtu::makeReadHoldingRegisters(1, 0, 10);
+    return expect(readHolding.toHex().toUpper() == QByteArray("01030000000AC5CD"), QStringLiteral("Modbus RTU 读保持寄存器帧 CRC 不匹配"))
+        && expect(upkun::device::modbus_rtu::hasValidCrc(readHolding), QStringLiteral("Modbus RTU CRC 校验应通过"))
+        && expect(!upkun::device::modbus_rtu::hasValidCrc(readHolding.left(readHolding.size() - 1)), QStringLiteral("截断 RTU 帧不应通过 CRC 校验"));
+}
+
 bool testModbusFaultInjection()
 {
     upkun::simulator::SimulatedModbusServer server;
@@ -180,6 +189,7 @@ int main(int argc, char* argv[])
 
     const bool ok = testPointMap()
         && testDatabaseSchema()
+        && testModbusRtuCodec()
         && testModbusFaultInjection();
 
     if (!ok) {
