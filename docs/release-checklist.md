@@ -16,6 +16,7 @@
 - 模拟器自动启动并监听配置中的地址和端口。
 - 通信诊断页显示已连接。
 - 主监控页启动后产量、工位和趋势数据正常刷新。
+- 系统设置页显示当前通信配置。
 
 ## 3. 功能检查
 
@@ -25,6 +26,8 @@
 - 配方页面：可保存、复制、下发配方，并记录下发日志。
 - 批次页面：可开始、结束批次，并记录产量和良率。
 - 趋势页面：可导出 CSV。
+- 工位详情页：传感器、执行机构和状态随快照刷新。
+- 报表中心：可刷新并导出 `data/report-export.csv`。
 
 ## 4. 数据与日志
 
@@ -40,6 +43,7 @@
 .\scripts\regression_test.ps1
 .\scripts\smoke_test.ps1
 .\scripts\package_release.ps1
+.\scripts\package_installer.ps1
 ```
 
-三个脚本都通过后，再交付 `dist/upkun-hmi` 或 `dist/upkun-hmi.zip`。
+前三个脚本都通过后，可交付 `dist/upkun-hmi` 或 `dist/upkun-hmi.zip`。如果本机安装了 Inno Setup，`package_installer.ps1` 还会生成安装程序。

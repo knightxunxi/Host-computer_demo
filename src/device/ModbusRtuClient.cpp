@@ -10,6 +10,15 @@ QString endpointText(const upkun::domain::DeviceConnectionConfig& config)
     return QStringLiteral("%1 %2bps slave %3").arg(config.serialPort).arg(config.baudRate).arg(config.slaveId);
 }
 
+QString transportStatusText()
+{
+#ifdef UPKUN_HAS_QT_SERIALPORT
+    return QStringLiteral("当前构建已检测到 QtSerialPort，后续可在此客户端补真实串口收发和响应解析");
+#else
+    return QStringLiteral("当前构建未检测到 QtSerialPort，仅提供 Modbus RTU 帧编码学习");
+#endif
+}
+
 } // namespace
 
 namespace upkun::device {
@@ -25,7 +34,7 @@ void ModbusRtuClient::connectToDevice(const upkun::domain::DeviceConnectionConfi
     m_diagnostics = {};
     m_diagnostics.endpoint = endpointText(config);
     m_diagnostics.state = upkun::domain::ConnectionState::Error;
-    m_diagnostics.lastError = QStringLiteral("当前构建仅提供 Modbus RTU 帧编码学习，未启用串口传输");
+    m_diagnostics.lastError = transportStatusText();
     ++m_diagnostics.errorCount;
     m_diagnostics.qualityPercent = 0;
 
@@ -109,7 +118,7 @@ void ModbusRtuClient::reportUnavailable(const QString& action)
     ++m_diagnostics.totalRequests;
     ++m_diagnostics.errorCount;
     m_diagnostics.lastRequestAt = QDateTime::currentDateTime();
-    m_diagnostics.lastError = action + QStringLiteral("：当前未启用串口传输");
+    m_diagnostics.lastError = action + QStringLiteral("：%1").arg(transportStatusText());
     m_diagnostics.qualityPercent = 0;
     publishDiagnostics();
 }

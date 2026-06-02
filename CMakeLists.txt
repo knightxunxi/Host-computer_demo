@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.24)
 
 project(UpkunHmi
-    VERSION 0.17.0
+    VERSION 0.24.0
     DESCRIPTION "C++ Qt industrial HMI learning project"
     LANGUAGES CXX
 )
@@ -15,6 +15,7 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
 find_package(Qt6 REQUIRED COMPONENTS Core Widgets Network Sql Charts)
+find_package(Qt6 COMPONENTS SerialPort QUIET)
 
 qt_standard_project_setup()
 enable_testing()
@@ -25,6 +26,8 @@ qt_add_executable(UpkunHmi WIN32
     src/app/MainWindow.cpp
     src/ui/pages/MonitorPage.h
     src/ui/pages/MonitorPage.cpp
+    src/ui/pages/StationDetailPage.h
+    src/ui/pages/StationDetailPage.cpp
     src/ui/pages/BatchPage.h
     src/ui/pages/BatchPage.cpp
     src/ui/pages/AlarmPage.h
@@ -33,10 +36,14 @@ qt_add_executable(UpkunHmi WIN32
     src/ui/pages/RecipePage.cpp
     src/ui/pages/TrendPage.h
     src/ui/pages/TrendPage.cpp
+    src/ui/pages/ReportPage.h
+    src/ui/pages/ReportPage.cpp
     src/ui/pages/SimulatorPage.h
     src/ui/pages/SimulatorPage.cpp
     src/ui/pages/DiagnosticsPage.h
     src/ui/pages/DiagnosticsPage.cpp
+    src/ui/pages/SettingsPage.h
+    src/ui/pages/SettingsPage.cpp
     src/ui/dialogs/LoginDialog.h
     src/ui/dialogs/LoginDialog.cpp
     src/domain/DeviceTypes.h
@@ -70,6 +77,8 @@ qt_add_executable(UpkunHmi WIN32
     src/storage/UserRepository.cpp
     src/storage/RecipeRepository.h
     src/storage/RecipeRepository.cpp
+    src/storage/ReportRepository.h
+    src/storage/ReportRepository.cpp
     src/storage/TrendRepository.h
     src/storage/TrendRepository.cpp
     src/infrastructure/AppConfig.h
@@ -93,6 +102,11 @@ target_link_libraries(UpkunHmi PRIVATE
 target_compile_definitions(UpkunHmi PRIVATE
     UPKUN_APP_VERSION="${PROJECT_VERSION}"
 )
+
+if(Qt6SerialPort_FOUND)
+    target_link_libraries(UpkunHmi PRIVATE Qt6::SerialPort)
+    target_compile_definitions(UpkunHmi PRIVATE UPKUN_HAS_QT_SERIALPORT=1)
+endif()
 
 qt_add_executable(UpkunSimulator WIN32
     src/simulator/main.cpp
@@ -121,6 +135,10 @@ qt_add_executable(UpkunRegressionTests
     tests/regression_tests.cpp
     src/device/ModbusRtuCodec.h
     src/device/ModbusRtuCodec.cpp
+    src/infrastructure/AppConfig.h
+    src/infrastructure/AppConfig.cpp
+    src/services/LineControlService.h
+    src/services/LineControlService.cpp
     src/simulator/LineSimulator.h
     src/simulator/LineSimulator.cpp
     src/simulator/SimulatedModbusServer.h

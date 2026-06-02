@@ -6,7 +6,7 @@
 
 - 学习目标：通过一个完整项目理解工业上位机从需求到交付的开发流程。
 - 业务场景：模拟一条小型包装产线，上位机负责设备监控、控制操作、报警处理、生产记录和配方管理。
-- 当前阶段：M18 协议扩展已进入实现，在 Modbus TCP 基础上新增 Modbus RTU 帧编码和 `IDeviceClient` 适配骨架。
+- 当前阶段：M24 已进入部署增强收尾，新增系统设置、工位详情、报表中心、RTU 串口条件接入、服务层命令收口和安装包脚本。
 - 后续设备接入：没有真实 PLC 前，默认使用仓库内置虚拟包装线/PLC 模拟器，并通过协议模拟学习 TCP Socket、Modbus TCP、串口、Modbus RTU、OPC UA 和 Snap7/S7。
 
 ## 技术栈规划
@@ -47,6 +47,12 @@
 - [M16 测试增强说明](docs/19-test-enhancement.md)
 - [M17 部署增强说明](docs/20-deployment-enhancement.md)
 - [M18 协议扩展说明](docs/21-protocol-extension.md)
+- [M19 系统设置与连接管理说明](docs/22-settings-management.md)
+- [M20 工位详情与手动调试说明](docs/23-station-detail.md)
+- [M21 报表中心说明](docs/24-report-center.md)
+- [M22 RTU 串口条件接入说明](docs/25-rtu-serial-extension.md)
+- [M23 服务层整理说明](docs/26-service-refactor.md)
+- [M24 安装包与部署增强说明](docs/27-installer-deployment.md)
 
 ## 当前实现能力
 
@@ -69,6 +75,12 @@
 - M16 新增 CTest 回归测试，覆盖点位映射、SQLite 表初始化和模拟器 Modbus 故障注入。
 - M17 新增配置读取、版本号显示、文件日志、发布目录数据/日志子目录和发布检查清单。
 - M18 新增 Modbus RTU CRC/帧编码、RTU 客户端适配骨架和配置项，默认仍使用 Modbus TCP。
+- M19 新增系统设置页，可保存通信模式、端点、自动启动模拟器、数据库路径和日志路径。
+- M20 新增工位详情页，按工位展示传感器、执行机构和状态，并提供工程师调试命令。
+- M21 新增报表中心，汇总批次、报警和趋势数据，并导出 `data/report-export.csv`。
+- M22 新增 QtSerialPort 条件检测，未安装串口模块时保留 RTU 编码学习和诊断提示。
+- M23 将监控和工位详情的控制命令收口到服务层入口，启动命令先做权限和前置条件检查。
+- M24 新增 Inno Setup 安装脚本模板和 `scripts/package_installer.ps1`。
 
 ## 构建运行
 
@@ -104,6 +116,12 @@ cmake --build build
 .\scripts\package_release.ps1
 ```
 
+安装包：
+
+```powershell
+.\scripts\package_installer.ps1
+```
+
 ## 阶段路线
 
 1. 仓库初始化与需求分析。
@@ -113,6 +131,7 @@ cmake --build build
 5. 报警、数据库、趋势曲线和配方。
 6. 用户权限、批次管理、配方增强和报警闭环。
 7. 测试、打包、部署、模拟器拆分和协议扩展。
+8. 系统设置、工位详情、报表中心、串口条件接入、服务层整理和安装包脚本。
 
 ## Git 约定
 

@@ -10,7 +10,10 @@
 #include "ui/pages/DiagnosticsPage.h"
 #include "ui/pages/MonitorPage.h"
 #include "ui/pages/RecipePage.h"
+#include "ui/pages/ReportPage.h"
+#include "ui/pages/SettingsPage.h"
 #include "ui/pages/SimulatorPage.h"
+#include "ui/pages/StationDetailPage.h"
 #include "ui/pages/TrendPage.h"
 
 #include <QCoreApplication>
@@ -184,19 +187,26 @@ MainWindow::MainWindow(QWidget* parent)
     m_pages->setAttribute(Qt::WA_StyledBackground, true);
     m_pages->setStyleSheet(QStringLiteral("#contentPages { background-color: #ffffff; }"));
     m_monitorPage = new upkun::ui::MonitorPage(m_pages);
+    m_stationDetailPage = new upkun::ui::StationDetailPage(m_pages);
     m_batchPage = new upkun::ui::BatchPage(m_pages);
     m_alarmPage = new upkun::ui::AlarmPage(m_pages);
     m_recipePage = new upkun::ui::RecipePage(m_pages);
     m_trendPage = new upkun::ui::TrendPage(m_pages);
+    m_reportPage = new upkun::ui::ReportPage(m_pages);
     m_simulatorPage = new upkun::ui::SimulatorPage(m_pages);
     m_diagnosticsPage = new upkun::ui::DiagnosticsPage(m_pages);
+    m_settingsPage = new upkun::ui::SettingsPage(m_pages);
+    m_settingsPage->setConfig(m_config);
     m_pages->addWidget(m_monitorPage);
+    m_pages->addWidget(m_stationDetailPage);
     m_pages->addWidget(m_batchPage);
     m_pages->addWidget(m_alarmPage);
     m_pages->addWidget(m_recipePage);
     m_pages->addWidget(m_trendPage);
+    m_pages->addWidget(m_reportPage);
     m_pages->addWidget(m_simulatorPage);
     m_pages->addWidget(m_diagnosticsPage);
+    m_pages->addWidget(m_settingsPage);
     bodyLayout->addWidget(m_pages, 1);
 
     rootLayout->addWidget(body, 1);
@@ -248,6 +258,7 @@ void MainWindow::handleSnapshotUpdated(const upkun::domain::DeviceSnapshot& snap
     }
 
     m_monitorPage->updateSnapshot(snapshot);
+    m_stationDetailPage->updateSnapshot(snapshot);
     m_trendPage->appendSnapshot(snapshot);
     m_simulatorPage->updateSnapshot(snapshot);
     updateActiveBatchView();
@@ -509,6 +520,138 @@ void MainWindow::exportTrendCsv()
     refreshAlarmRecords();
 }
 
+void MainWindow::handleLineCommandRequested(upkun::domain::DeviceCommand command)
+{
+    const QString action = commandText(command);
+    const bool engineerCommand = command == upkun::domain::DeviceCommand::ModeAuto
+        || command == upkun::domain::DeviceCommand::ModeManual
+        || command == upkun::domain::DeviceCommand::RejectTest;
+    const auto requiredRole = engineerCommand ? upkun::domain::UserRole::Engineer : upkun::domain::UserRole::Operator;
+    if (!ensureRole(requiredRole, action)) {
+        if (m_stationDetailPage != nullptr) {
+            m_stationDetailPage->setMessage(QStringLiteral("%1被拒绝：权限不足").arg(action));
+        }
+        return;
+    }
+
+    if (command == upkun::domain::DeviceCommand::Start) {
+        QString reason;
+        if (!m_lineControlService.canStart(m_latestSnapshot, &reason)) {
+            const QString message = QStringLiteral("启动被拒绝：%1").arg(reason);
+            m_alarmLabel->setText(message);
+            if (m_stationDetailPage != nullptr) {
+                m_stationDetailPage->setMessage(message);
+            }
+            appendOperationLog(action, QStringLiteral("启动前置条件"), QStringLiteral("拒绝"), reason);
+            refreshAlarmRecords();
+            return;
+        }
+    }
+
+    if (m_deviceClient == nullptr) {
+        const QString message = QStringLiteral("设备客户端未初始化");
+        m_alarmLabel->setText(message);
+        if (m_stationDetailPage != nullptr) {
+            m_stationDetailPage->setMessage(message);
+        }
+        appendOperationLog(action, QStringLiteral("PLC/模拟器"), QStringLiteral("失败"), message);
+        refreshAlarmRecords();
+        return;
+    }
+
+    m_deviceClient->sendCommand(command);
+    if (m_stationDetailPage != nullptr) {
+        m_stationDetailPage->setMessage(QStringLiteral("已发送：%1").arg(action));
+    }
+}
+
+void MainWindow::handleConfigSaveRequested(upkun::infrastructure::AppConfig config, bool reconnect)
+{
+    config.sourcePath = QStringLiteral("config/app.ini");
+    QString errorMessage;
+    if (!upkun::infrastructure::AppConfig::save(config, config.sourcePath, &errorMessage)) {
+        m_settingsPage->setMessage(QStringLiteral("保存失败：%1").arg(errorMessage));
+        appendOperationLog(QStringLiteral("保存系统设置"), config.sourcePath, QStringLiteral("失败"), errorMessage);
+        refreshAlarmRecords();
+        return;
+    }
+
+    m_config = config;
+    m_settingsPage->setConfig(m_config);
+    m_settingsPage->setMessage(reconnect ? QStringLiteral("保存成功，正在重连") : QStringLiteral("保存成功，重连后生效"));
+    m_simulatorPage->setEndpoint(endpointText(m_config.device));
+    appendOperationLog(QStringLiteral("保存系统设置"), config.sourcePath, QStringLiteral("成功"),
+        QStringLiteral("通信模式 %1，端点 %2").arg(m_config.device.mode, endpointText(m_config.device)));
+
+    if (reconnect) {
+        disconnectDevice();
+        configureDeviceClient();
+        connectDevice();
+    }
+    refreshAlarmRecords();
+}
+
+void MainWindow::connectDevice()
+{
+    if (m_deviceClient == nullptr) {
+        configureDeviceClient();
+    }
+    if (m_deviceClient == nullptr) {
+        return;
+    }
+
+    m_simulatorPage->setEndpoint(endpointText(m_config.device));
+    m_simulatorPage->setListening(false);
+    m_deviceClient->connectToDevice(m_config.device);
+    appendOperationLog(QStringLiteral("连接设备"), endpointText(m_config.device), QStringLiteral("已发送"), m_config.device.mode);
+    refreshAlarmRecords();
+}
+
+void MainWindow::disconnectDevice()
+{
+    if (m_deviceClient != nullptr) {
+        m_deviceClient->disconnectFromDevice();
+    }
+    if (m_simulatorProcess != nullptr && m_simulatorProcess->state() != QProcess::NotRunning) {
+        m_simulatorProcess->terminate();
+        if (!m_simulatorProcess->waitForFinished(1500)) {
+            m_simulatorProcess->kill();
+            m_simulatorProcess->waitForFinished(1000);
+        }
+    }
+    m_simulatorPage->setListening(false);
+    appendOperationLog(QStringLiteral("断开设备"), endpointText(m_config.device), QStringLiteral("成功"), QStringLiteral("已断开"));
+    refreshAlarmRecords();
+}
+
+void MainWindow::refreshReports()
+{
+    if (m_reportPage == nullptr) {
+        return;
+    }
+    m_reportPage->setSummary(m_reportRepository.summary());
+    m_reportPage->setBatchRows(m_reportRepository.batchRows());
+    m_reportPage->setAlarmRows(m_reportRepository.alarmSummaryRows());
+    m_reportPage->setTrendRows(m_reportRepository.trendSummaryRows());
+    m_reportPage->setMessage(QStringLiteral("已刷新"));
+}
+
+void MainWindow::exportReportCsv()
+{
+    QString errorMessage;
+    const QString filePath = QStringLiteral("data/report-export.csv");
+    if (!m_reportRepository.exportCsv(filePath, &errorMessage)) {
+        m_reportPage->setMessage(QStringLiteral("导出失败：%1").arg(errorMessage));
+        appendOperationLog(QStringLiteral("导出报表"), filePath, QStringLiteral("失败"), errorMessage);
+        refreshAlarmRecords();
+        return;
+    }
+
+    m_reportPage->setMessage(QStringLiteral("已导出 %1").arg(filePath));
+    appendOperationLog(QStringLiteral("导出报表"), filePath, QStringLiteral("成功"), QStringLiteral("CSV"));
+    refreshAlarmRecords();
+}
+
 void MainWindow::startSimulator()
 {
     if (m_config.device.mode == QStringLiteral("modbus_rtu")) {
@@ -662,12 +805,15 @@ QWidget* MainWindow::createNavigation()
 
     m_navigation = new QListWidget(frame);
     m_navigation->addItem(new QListWidgetItem(QStringLiteral("主监控")));
+    m_navigation->addItem(new QListWidgetItem(QStringLiteral("工位详情")));
     m_navigation->addItem(new QListWidgetItem(QStringLiteral("批次管理")));
     m_navigation->addItem(new QListWidgetItem(QStringLiteral("报警记录")));
     m_navigation->addItem(new QListWidgetItem(QStringLiteral("参数/配方")));
     m_navigation->addItem(new QListWidgetItem(QStringLiteral("趋势曲线")));
+    m_navigation->addItem(new QListWidgetItem(QStringLiteral("报表中心")));
     m_navigation->addItem(new QListWidgetItem(QStringLiteral("模拟器")));
     m_navigation->addItem(new QListWidgetItem(QStringLiteral("通信诊断")));
+    m_navigation->addItem(new QListWidgetItem(QStringLiteral("系统设置")));
     layout->addWidget(m_navigation);
 
     return frame;
@@ -748,33 +894,30 @@ void MainWindow::setupStorage()
         this, &MainWindow::refreshRecipeRecords);
     connect(m_trendPage, &upkun::ui::TrendPage::exportRequested,
         this, &MainWindow::exportTrendCsv);
+    connect(m_reportPage, &upkun::ui::ReportPage::refreshRequested,
+        this, &MainWindow::refreshReports);
+    connect(m_reportPage, &upkun::ui::ReportPage::exportRequested,
+        this, &MainWindow::exportReportCsv);
+    connect(m_settingsPage, &upkun::ui::SettingsPage::configSaveRequested,
+        this, &MainWindow::handleConfigSaveRequested);
+    connect(m_settingsPage, &upkun::ui::SettingsPage::connectRequested,
+        this, &MainWindow::connectDevice);
+    connect(m_settingsPage, &upkun::ui::SettingsPage::disconnectRequested,
+        this, &MainWindow::disconnectDevice);
 
     appendOperationLog(QStringLiteral("启动程序"), QStringLiteral("数据库"), QStringLiteral("成功"), m_config.databasePath);
     refreshAlarmRecords();
     refreshBatchRecords();
+    refreshReports();
 }
 
 void MainWindow::setupDeviceLink()
 {
-    // M14 后模拟器作为独立进程运行，上位机只通过 Modbus TCP 协议连接它。
     m_simulatorProcess = new QProcess(this);
-    if (m_config.device.mode == QStringLiteral("modbus_rtu")) {
-        m_deviceClient = new upkun::device::ModbusRtuClient(this);
-    } else {
-        m_deviceClient = new upkun::device::ModbusTcpClient(this);
-    }
-    m_simulatorPage->setEndpoint(endpointText(m_config.device));
-
-    connect(m_deviceClient, &upkun::device::IDeviceClient::connectionChanged,
-        this, &MainWindow::handleConnectionChanged);
-    connect(m_deviceClient, &upkun::device::IDeviceClient::snapshotUpdated,
-        this, &MainWindow::handleSnapshotUpdated);
-    connect(m_deviceClient, &upkun::device::IDeviceClient::diagnosticsUpdated,
-        this, &MainWindow::handleDiagnosticsUpdated);
-    connect(m_deviceClient, &upkun::device::IDeviceClient::commandFinished,
-        this, &MainWindow::handleCommandFinished);
     connect(m_monitorPage, &upkun::ui::MonitorPage::commandRequested,
-        m_deviceClient, &upkun::device::IDeviceClient::sendCommand);
+        this, &MainWindow::handleLineCommandRequested);
+    connect(m_stationDetailPage, &upkun::ui::StationDetailPage::commandRequested,
+        this, &MainWindow::handleLineCommandRequested);
     connect(m_simulatorProcess, &QProcess::finished, this, [this](int exitCode, QProcess::ExitStatus exitStatus) {
         Q_UNUSED(exitCode)
         Q_UNUSED(exitStatus)
@@ -808,7 +951,40 @@ void MainWindow::setupDeviceLink()
             refreshAlarmRecords();
         });
 
-    startSimulator();
+    configureDeviceClient();
+    if (m_config.autoStartSimulator) {
+        startSimulator();
+    } else {
+        connectDevice();
+    }
+}
+
+void MainWindow::configureDeviceClient()
+{
+    if (m_deviceClient != nullptr) {
+        m_deviceClient->disconnect(this);
+        m_deviceClient->disconnectFromDevice();
+        m_deviceClient->deleteLater();
+        m_deviceClient = nullptr;
+    }
+
+    // M19 后设备客户端可按配置切换。UI 始终面向 IDeviceClient，不依赖具体协议。
+    if (m_config.device.mode == QStringLiteral("modbus_rtu")) {
+        m_deviceClient = new upkun::device::ModbusRtuClient(this);
+    } else {
+        m_deviceClient = new upkun::device::ModbusTcpClient(this);
+    }
+    m_simulatorPage->setEndpoint(endpointText(m_config.device));
+    m_settingsPage->setConfig(m_config);
+
+    connect(m_deviceClient, &upkun::device::IDeviceClient::connectionChanged,
+        this, &MainWindow::handleConnectionChanged);
+    connect(m_deviceClient, &upkun::device::IDeviceClient::snapshotUpdated,
+        this, &MainWindow::handleSnapshotUpdated);
+    connect(m_deviceClient, &upkun::device::IDeviceClient::diagnosticsUpdated,
+        this, &MainWindow::handleDiagnosticsUpdated);
+    connect(m_deviceClient, &upkun::device::IDeviceClient::commandFinished,
+        this, &MainWindow::handleCommandFinished);
 }
 
 void MainWindow::loginDefaultOperator()

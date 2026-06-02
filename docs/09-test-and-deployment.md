@@ -7,6 +7,7 @@
 - `scripts/smoke_test.ps1`：构建程序、隐藏启动上位机、验证 Modbus TCP 模拟器、验证 SQLite 数据库创建。
 - `scripts/regression_test.ps1`：构建程序并运行 CTest 回归测试，覆盖点位、数据库和协议。
 - `scripts/package_release.ps1`：Release 构建，用 `windeployqt` 收集 Qt 运行库到 `dist/upkun-hmi`，并生成 `dist/upkun-hmi.zip`。
+- `scripts/package_installer.ps1`：先生成 portable 包，再在检测到 Inno Setup `ISCC.exe` 时生成安装程序。
 - `docs/09-test-and-deployment.md`：测试、打包和部署说明。
 
 ## 2. 烟测
@@ -50,7 +51,8 @@ Smoke test passed.
 3. 点位地址转换符合点位表。
 4. Modbus RTU CRC 和典型请求帧符合预期。
 5. SQLite 初始化能创建核心业务表。
-6. 独立模拟器支持 Modbus TCP 写故障码、触发故障并读回报警码。
+6. 配置保存/读取和启动前置条件检查通过。
+7. 独立模拟器支持 Modbus TCP 写故障码、触发故障并读回报警码。
 ```
 
 通过标志：
@@ -101,7 +103,10 @@ RELEASE-CHECKLIST.md
 6. 趋势曲线页确认曲线持续刷新。
 7. 趋势曲线页点击“导出趋势CSV”，确认 `data/trend-export.csv` 生成。
 8. 通信诊断页确认请求数、响应数和通信质量持续刷新。
-9. 关闭程序，重新启动，确认数据库不会丢失历史记录。
+9. 系统设置页修改端点或自动启动模拟器开关，保存并重连。
+10. 工位详情页确认传感器、执行机构和状态随快照刷新。
+11. 报表中心点击刷新和导出 CSV，确认 `data/report-export.csv` 生成。
+12. 关闭程序，重新启动，确认数据库不会丢失历史记录。
 
 ## 6. 部署注意事项
 
@@ -110,11 +115,11 @@ RELEASE-CHECKLIST.md
 - `data/` 和 `logs/` 是运行期数据目录，不提交 Git。
 - 程序启动时优先读取 `config/app.ini`，不存在时回退到 `config/app.example.ini`。
 - `config/app.example.ini` 是示例配置，真实部署时可复制为 `config/app.ini` 后修改。
-- 若目标机器端口 `1502` 被占用，模拟器启动会失败；后续会把端口配置做成界面设置项。
+- 若目标机器端口 `1502` 被占用，可在系统设置页修改端口，或关闭自动启动模拟器后连接外部模拟器/真实设备。
 
 ## 7. 当前限制
 
-- 还没有 Inno Setup 安装包，当前交付形态是可运行目录。
-- 当前 zip 是免安装 portable 包，不是 MSI/EXE 安装向导。
+- 已提供 Inno Setup 脚本模板；未安装 Inno Setup 时只能生成 portable 包。
+- 当前 zip 是免安装 portable 包；安装向导依赖本机 `ISCC.exe`。
 - 烟测是端到端基础检查，不替代完整 UI 手工测试。
 - 已有轻量 CTest 回归测试；后续可继续引入 GoogleTest 扩展服务层单元测试。

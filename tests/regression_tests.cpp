@@ -1,5 +1,7 @@
 #include "device/ModbusPointMap.h"
 #include "device/ModbusRtuCodec.h"
+#include "infrastructure/AppConfig.h"
+#include "services/LineControlService.h"
 #include "simulator/SimulatedModbusServer.h"
 #include "storage/DatabaseManager.h"
 
@@ -149,6 +151,55 @@ bool testModbusRtuCodec()
         && expect(!upkun::device::modbus_rtu::hasValidCrc(readHolding.left(readHolding.size() - 1)), QStringLiteral("截断 RTU 帧不应通过 CRC 校验"));
 }
 
+bool testAppConfigSaveLoad()
+{
+    QTemporaryDir tempDir(QDir::current().filePath(QStringLiteral("upkun-test-config-XXXXXX")));
+    if (!expect(tempDir.isValid(), QStringLiteral("无法创建测试配置目录"))) {
+        return false;
+    }
+
+    upkun::infrastructure::AppConfig config;
+    config.databasePath = QStringLiteral("data/custom.sqlite3");
+    config.logPath = QStringLiteral("custom-logs");
+    config.autoStartSimulator = false;
+    config.device.mode = QStringLiteral("modbus_rtu");
+    config.device.serialPort = QStringLiteral("COM9");
+    config.device.baudRate = 19200;
+    config.device.slaveId = 7;
+    config.device.timeoutMs = 2500;
+
+    const QString configPath = QDir(tempDir.path()).filePath(QStringLiteral("app.ini"));
+    QString errorMessage;
+    if (!expect(upkun::infrastructure::AppConfig::save(config, configPath, &errorMessage), QStringLiteral("配置保存失败：%1").arg(errorMessage))) {
+        return false;
+    }
+
+    const auto loaded = upkun::infrastructure::AppConfig::load(configPath, QString {});
+    return expect(loaded.device.mode == QStringLiteral("modbus_rtu"), QStringLiteral("配置模式应可保存读取"))
+        && expect(loaded.device.serialPort == QStringLiteral("COM9"), QStringLiteral("串口名称应可保存读取"))
+        && expect(loaded.device.baudRate == 19200, QStringLiteral("波特率应可保存读取"))
+        && expect(loaded.device.slaveId == 7, QStringLiteral("从站 ID 应可保存读取"))
+        && expect(!loaded.autoStartSimulator, QStringLiteral("自动启动模拟器开关应可保存读取"))
+        && expect(loaded.databasePath == QStringLiteral("data/custom.sqlite3"), QStringLiteral("数据库路径应可保存读取"));
+}
+
+bool testLineControlService()
+{
+    upkun::services::LineControlService service;
+    upkun::domain::DeviceSnapshot snapshot;
+    snapshot.stationInputs.plcReady = true;
+    snapshot.currentMode = upkun::domain::RunMode::Auto;
+
+    QString reason;
+    if (!expect(service.canStart(snapshot, &reason), QStringLiteral("正常快照应允许启动"))) {
+        return false;
+    }
+
+    snapshot.currentAlarmCode = 2001;
+    return expect(!service.canStart(snapshot, &reason), QStringLiteral("存在报警时不应允许启动"))
+        && expect(reason == QStringLiteral("当前存在报警"), QStringLiteral("启动拒绝原因应指向当前报警"));
+}
+
 bool testModbusFaultInjection()
 {
     upkun::simulator::SimulatedModbusServer server;
@@ -190,6 +241,8 @@ int main(int argc, char* argv[])
     const bool ok = testPointMap()
         && testDatabaseSchema()
         && testModbusRtuCodec()
+        && testAppConfigSaveLoad()
+        && testLineControlService()
         && testModbusFaultInjection();
 
     if (!ok) {
