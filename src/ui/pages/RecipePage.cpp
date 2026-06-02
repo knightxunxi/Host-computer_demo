@@ -17,7 +17,12 @@ RecipePage::RecipePage(QWidget* parent)
 {
     setStyleSheet(QStringLiteral(
         "QWidget { background: #ffffff; color: #000000; }"
-        "QLineEdit, QSpinBox { background: #ffffff; color: #000000; border: 1px solid #a0a0a0; min-height: 28px; padding: 2px 6px; }"
+        "QLineEdit { background: #ffffff; color: #000000; border: 1px solid #a0a0a0; min-height: 28px; padding: 2px 6px; }"
+        "QSpinBox { background: #ffffff; color: #000000; border: 1px solid #a0a0a0; min-height: 28px; padding: 2px 40px 2px 6px; }"
+        "QSpinBox::up-button { subcontrol-origin: border; subcontrol-position: top right; width: 32px; border-left: 1px solid #a0a0a0; border-bottom: 1px solid #a0a0a0; background: #f5f5f5; }"
+        "QSpinBox::down-button { subcontrol-origin: border; subcontrol-position: bottom right; width: 32px; border-left: 1px solid #a0a0a0; background: #f5f5f5; }"
+        "QSpinBox::up-button:hover, QSpinBox::down-button:hover { background: #eeeeee; }"
+        "QSpinBox::up-button:pressed, QSpinBox::down-button:pressed { background: #dddddd; }"
         "QPushButton { background: #f5f5f5; color: #000000; border: 1px solid #a0a0a0; min-height: 32px; padding: 0 14px; }"
         "QPushButton:hover { background: #eeeeee; }"
         "QTableWidget { background: #ffffff; color: #000000; gridline-color: #d0d0d0; }"
