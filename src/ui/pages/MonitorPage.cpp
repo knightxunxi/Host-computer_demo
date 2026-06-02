@@ -31,11 +31,37 @@ QString stationStateText(const upkun::domain::DeviceSnapshot& snapshot, int stat
     return QStringLiteral("待机");
 }
 
+QString stationStateMarkup(const upkun::domain::DeviceSnapshot& snapshot, int stationIndex)
+{
+    const QString text = stationStateText(snapshot, stationIndex);
+    if (text == QStringLiteral("报警")) {
+        return QStringLiteral("<span style=\"color:#d00000;\">报警</span>");
+    }
+
+    if (text == QStringLiteral("报警停机")) {
+        return QStringLiteral("<span style=\"color:#d00000;\">报警</span><span style=\"color:#d18b00;\">停机</span>");
+    }
+
+    return text;
+}
+
 void setLabel(QLabel* label, const QString& value)
 {
     if (label != nullptr) {
         label->setText(value);
     }
+}
+
+void setAlarmLabel(QLabel* label, int alarmCode)
+{
+    if (label == nullptr) {
+        return;
+    }
+
+    label->setText(alarmCode == 0 ? QStringLiteral("无") : QString::number(alarmCode));
+    label->setStyleSheet(alarmCode == 0
+            ? QStringLiteral("background: transparent; font-size: 22px; font-weight: 700; color: #000000;")
+            : QStringLiteral("background: transparent; font-size: 22px; font-weight: 700; color: #d00000;"));
 }
 
 } // namespace
@@ -48,7 +74,9 @@ MonitorPage::MonitorPage(QWidget* parent)
     auto* rootLayout = new QVBoxLayout(this);
     rootLayout->setContentsMargins(24, 20, 24, 20);
     rootLayout->setSpacing(18);
-    setStyleSheet(QStringLiteral("QWidget { background: #ffffff; color: #000000; }"));
+    setObjectName(QStringLiteral("monitorPage"));
+    setAttribute(Qt::WA_StyledBackground, true);
+    setStyleSheet(QStringLiteral("#monitorPage { background-color: #ffffff; color: #000000; }"));
 
     auto* title = new QLabel(QStringLiteral("主监控"), this);
     title->setStyleSheet(QStringLiteral("font-size: 24px; font-weight: 700; color: #000000;"));
@@ -85,7 +113,7 @@ MonitorPage::MonitorPage(QWidget* parent)
 void MonitorPage::updateSnapshot(const upkun::domain::DeviceSnapshot& snapshot)
 {
     for (int i = 0; i < m_stationStateLabels.size(); ++i) {
-        setLabel(m_stationStateLabels.at(i), stationStateText(snapshot, i + 1));
+        setLabel(m_stationStateLabels.at(i), stationStateMarkup(snapshot, i + 1));
     }
 
     setLabel(m_totalValueLabel, QStringLiteral("%1 pcs").arg(snapshot.counters.total));
@@ -93,7 +121,7 @@ void MonitorPage::updateSnapshot(const upkun::domain::DeviceSnapshot& snapshot)
     setLabel(m_badValueLabel, QStringLiteral("%1 pcs").arg(snapshot.counters.bad));
     setLabel(m_speedValueLabel, QStringLiteral("%1 pcs/min").arg(snapshot.counters.speed));
     setLabel(m_batchValueLabel, snapshot.counters.batch > 0 ? QStringLiteral("%1 pcs").arg(snapshot.counters.batch) : QStringLiteral("未开始"));
-    setLabel(m_alarmValueLabel, snapshot.currentAlarmCode == 0 ? QStringLiteral("无") : QString::number(snapshot.currentAlarmCode));
+    setAlarmLabel(m_alarmValueLabel, snapshot.currentAlarmCode);
     setLabel(m_fillValueLabel, QStringLiteral("%1 ml").arg(snapshot.processValues.fillVolumeMl));
     setLabel(m_weightValueLabel, QStringLiteral("%1 g").arg(snapshot.processValues.weightGram));
 }
@@ -104,7 +132,7 @@ QWidget* MonitorPage::createStationCard(const QString& title, const QString& sta
     card->setObjectName(QStringLiteral("stationCard"));
     card->setMinimumHeight(90);
     card->setStyleSheet(QStringLiteral(
-        "#stationCard { background: #ffffff; border: 1px solid #d0d0d0; border-radius: 4px; }"
+        "#stationCard { background: #f2f2f2; border: 1px solid #d0d0d0; border-radius: 4px; }"
         "QLabel { background: transparent; color: #000000; }"));
 
     auto* layout = new QVBoxLayout(card);
@@ -117,6 +145,7 @@ QWidget* MonitorPage::createStationCard(const QString& title, const QString& sta
 
     auto* stateLabel = new QLabel(state, card);
     stateLabel->setAlignment(Qt::AlignCenter);
+    stateLabel->setTextFormat(Qt::RichText);
     stateLabel->setStyleSheet(QStringLiteral("background: transparent; color: #000000; font-weight: 600;"));
     m_stationStateLabels.append(stateLabel);
 
@@ -133,7 +162,7 @@ QWidget* MonitorPage::createMetricCard(const QString& title, const QString& valu
     card->setObjectName(QStringLiteral("metricCard"));
     card->setMinimumHeight(88);
     card->setStyleSheet(QStringLiteral(
-        "#metricCard { background: #ffffff; border: 1px solid #d0d0d0; border-radius: 4px; }"
+        "#metricCard { background: #f2f2f2; border: 1px solid #d0d0d0; border-radius: 4px; }"
         "QLabel { background: transparent; color: #000000; }"));
 
     auto* layout = new QVBoxLayout(card);
@@ -160,8 +189,8 @@ void MonitorPage::addControlButtons(QGridLayout* layout)
     panel->setObjectName(QStringLiteral("controlPanel"));
     panel->setMinimumHeight(96);
     panel->setStyleSheet(QStringLiteral(
-        "#controlPanel { background: #ffffff; border: 1px solid #d0d0d0; border-radius: 4px; }"
-        "QPushButton { background: #f5f5f5; color: #000000; border: 1px solid #a0a0a0; min-height: 34px; padding: 0 18px; font-weight: 600; }"
+        "#controlPanel { background: #f2f2f2; border: 1px solid #d0d0d0; border-radius: 4px; }"
+        "QPushButton { background: #ffffff; color: #000000; border: 1px solid #a0a0a0; min-height: 34px; padding: 0 18px; font-weight: 600; }"
         "QPushButton:hover { background: #eeeeee; }"
         "QPushButton:pressed { background: #dddddd; }"));
 

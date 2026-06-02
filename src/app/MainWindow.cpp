@@ -170,6 +170,9 @@ MainWindow::MainWindow(QWidget* parent)
     rootLayout->addWidget(createStatusHeader());
 
     auto* body = new QWidget(root);
+    body->setObjectName(QStringLiteral("contentBody"));
+    body->setAttribute(Qt::WA_StyledBackground, true);
+    body->setStyleSheet(QStringLiteral("#contentBody { background-color: #ffffff; }"));
     auto* bodyLayout = new QHBoxLayout(body);
     bodyLayout->setContentsMargins(0, 0, 0, 0);
     bodyLayout->setSpacing(0);
@@ -177,6 +180,9 @@ MainWindow::MainWindow(QWidget* parent)
     bodyLayout->addWidget(createNavigation());
 
     m_pages = new QStackedWidget(body);
+    m_pages->setObjectName(QStringLiteral("contentPages"));
+    m_pages->setAttribute(Qt::WA_StyledBackground, true);
+    m_pages->setStyleSheet(QStringLiteral("#contentPages { background-color: #ffffff; }"));
     m_monitorPage = new upkun::ui::MonitorPage(m_pages);
     m_batchPage = new upkun::ui::BatchPage(m_pages);
     m_alarmPage = new upkun::ui::AlarmPage(m_pages);
